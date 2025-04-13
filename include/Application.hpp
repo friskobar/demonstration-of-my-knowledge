@@ -22,12 +22,17 @@ private:
     int rateSuitability(VkPhysicalDevice device);
     Application::QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 
+    void createLogicalDevice();
+
     void mainLoop();
 
     void cleanUp();
 
     GLFWwindow* window;
 
+    VkQueue graphics_queue;
+
+    VkDevice device;
     VkPhysicalDevice physical_device = VK_NULL_HANDLE;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debug_messenger;

@@ -58,6 +58,7 @@ void Application::initVulkan(){
     createInstance();
     createMessenger();
     pickPhysicalDevice();
+    createLogicalDevice();
 }
 
 void Application::createInstance(){
@@ -278,6 +279,32 @@ int Application::rateSuitability(VkPhysicalDevice physical_device) {
     return score;
 }
 
+void Application::createLogicalDevice(){
+    QueueFamilyIndices indices = findQueueFamilies(physical_device);
+
+    VkDeviceQueueCreateInfo queue_create_info{};
+    queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue_create_info.queueFamilyIndex = indices.graphics.value();
+    queue_create_info.queueCount = 1;
+    const float priority = 1.0f;
+    queue_create_info.pQueuePriorities = &priority;
+
+    VkPhysicalDeviceFeatures device_features{};
+
+    VkDeviceCreateInfo device_create_info{};
+    device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    device_create_info.pQueueCreateInfos = &queue_create_info;
+    device_create_info.queueCreateInfoCount = 1;
+    device_create_info.pEnabledFeatures = &device_features;
+
+    if(vkCreateDevice(physical_device, &device_create_info, nullptr, &device) != VK_SUCCESS){
+        throw std::runtime_error("Could not create VkDevice.");
+    }
+
+    vkGetDeviceQueue(device, indices.graphics.value(), 0, &graphics_queue);
+
+}
+
 void Application::mainLoop(){
     if(verbose)
         std::cout<< "mainLoop\n";
@@ -295,6 +322,7 @@ void Application::cleanUp(){
             func(instance, debug_messenger, nullptr);
         }
     }
+    vkDestroyDevice(device, nullptr);
     vkDestroyInstance(instance, nullptr);
     glfwDestroyWindow(window);
     glfwTerminate();

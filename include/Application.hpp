@@ -5,6 +5,8 @@ class Application{
 public:
     void run();
 private:
+    struct QueueFamilyIndices;
+
     void initWindow();
 
     void initVulkan();
@@ -15,12 +17,18 @@ private:
     bool checkValidationLayerSupport();
     std::vector<const char*> getRequiredExtensions();
 
+    void pickPhysicalDevice();
+    bool isDeviceSuitable(VkPhysicalDevice device);
+    int rateSuitability(VkPhysicalDevice device);
+    Application::QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
+
     void mainLoop();
 
     void cleanUp();
 
     GLFWwindow* window;
 
+    VkPhysicalDevice physical_device = VK_NULL_HANDLE;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debug_messenger;
 

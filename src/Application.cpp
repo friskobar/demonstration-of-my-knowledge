@@ -7,27 +7,45 @@
 #include <iostream>
 #include <map>
 #include <string>
+#include <optional>
 
 const std::vector<const char*> validation_layers = {
     "VK_LAYER_KHRONOS_validation"
 };
 
 #ifdef DEBUG
-    const bool verbose = true;
     const bool enable_validation_layers = true;
 #else
-    const bool verbose = false;
     const bool enable_validation_layers = false;
 #endif
 
+#ifdef VERBOSE
+    const bool verbose = true;
+#else
+    const bool verbose = false;
+#endif
+
+struct Application::QueueFamilyIndices{
+    std::optional<uint32_t> graphics;
+
+    bool is_complete(){
+        return graphics.has_value();
+    }
+};
+
+
 void Application::run() {
-    initVulkan();
+    if(verbose)
+        std::cout<< "run\n";
     initWindow();
+    initVulkan();
     mainLoop();
     cleanUp();
 }
 
 void Application::initWindow(){
+    if(verbose)
+        std::cout<< "initWindow\n";
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
@@ -35,11 +53,16 @@ void Application::initWindow(){
 };
 
 void Application::initVulkan(){
+    if(verbose)
+        std::cout<< "initVulkan\n";
     createInstance();
     createMessenger();
+    pickPhysicalDevice();
 }
 
 void Application::createInstance(){
+    if(verbose)
+        std::cout<< "createInstance\n";
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = "Hello Triangle";
@@ -79,6 +102,8 @@ void Application::createInstance(){
 };
 
 bool Application::checkValidationLayerSupport(){
+    if(verbose)
+        std::cout<< "checkValidationLayerSupport\n";
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
 
@@ -105,6 +130,8 @@ bool Application::checkValidationLayerSupport(){
 }
 
 std::vector<const char*> Application::getRequiredExtensions() {
+    if(verbose)
+        std::cout<< "getRequiredExtensions\n";
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
@@ -120,6 +147,8 @@ std::vector<const char*> Application::getRequiredExtensions() {
 }
 
 void Application::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
+    if(verbose)
+        std::cout<< "populateDebugMessengerCreateInfo\n";
     createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     if(verbose){
@@ -134,6 +163,8 @@ void Application::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateIn
 
 void Application::createMessenger(){
     if(!enable_validation_layers) return;
+    if(verbose)
+        std::cout<< "createMessenger\n";
     VkDebugUtilsMessengerCreateInfoEXT createInfo{};
     populateDebugMessengerCreateInfo(createInfo);
 
@@ -159,13 +190,105 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Application::debugCallback(VkDebugUtilsMessageSev
     return VK_FALSE;
 }
 
+void Application::pickPhysicalDevice(){
+    if(verbose)
+        std::cout<< "pickPhysicalDevice\n";
+    uint32_t device_count;
+    vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
+
+    if(device_count == 0){
+        std::runtime_error("Could not find any GPU's with vulkan support.");
+    }
+
+    std::vector<VkPhysicalDevice> devices(device_count);
+
+    vkEnumeratePhysicalDevices(instance, &device_count, devices.data());
+    
+    std::map<uint32_t, VkPhysicalDevice, std::greater<int>> points;
+    
+    for (const VkPhysicalDevice device : devices) {
+        if(isDeviceSuitable(device)){
+            uint32_t device_points = rateSuitability(device);
+            points.insert(std::make_pair(device_points, device));
+        }
+    }
+
+    if(points.empty()){
+        throw std::runtime_error("Failed to find a suitable GPU.");
+    } else {
+        physical_device = points.begin()->second;
+        std::cout << physical_device << std::endl;
+    }
+        
+}
+
+Application::QueueFamilyIndices Application::findQueueFamilies(VkPhysicalDevice device){
+    if(verbose)
+        std::cout<< "findQueueFamilies\n";
+    QueueFamilyIndices indices;
+    
+    uint32_t queue_family_count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
+    std::vector<VkQueueFamilyProperties> family_properties(queue_family_count);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, family_properties.data());
+
+    int i = 0;
+    for(const VkQueueFamilyProperties& property : family_properties){
+        if(property.queueFlags & VK_QUEUE_GRAPHICS_BIT){
+            indices.graphics = i;
+        }
+
+        if(indices.is_complete()){
+            break;
+        }
+        i++;
+    }
+    return indices;
+}
+
+bool Application::isDeviceSuitable(VkPhysicalDevice device){
+    if(verbose)
+        std::cout<< "isDeviceSuitable\n";
+    QueueFamilyIndices indices = findQueueFamilies(device);
+    std::cout << indices.is_complete();
+    return indices.is_complete();
+}
+
+int Application::rateSuitability(VkPhysicalDevice physical_device) {
+    if(verbose)
+        std::cout<< "rateSuitability\n";
+    uint32_t score = 0;
+
+    VkPhysicalDeviceFeatures device_features;
+    vkGetPhysicalDeviceFeatures(physical_device, &device_features);
+    if (!device_features.geometryShader) {
+        return 0;
+    }
+
+    VkPhysicalDeviceProperties device_properties;
+    vkGetPhysicalDeviceProperties(physical_device, &device_properties);
+
+
+    if (device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+        score += 1;
+    }
+
+    score += device_properties.limits.maxGeometryShaderInvocations;
+
+    return score;
+}
+
 void Application::mainLoop(){
+    if(verbose)
+        std::cout<< "mainLoop\n";
     while(!glfwWindowShouldClose(window)){
         glfwPollEvents();
     };
 };
 
 void Application::cleanUp(){
+    if(verbose)
+        std::cout<< "cleanUp\n";
     if(enable_validation_layers){
         auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
         if (func != nullptr) {

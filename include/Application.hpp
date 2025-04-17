@@ -11,6 +11,7 @@ private:
 
     void initVulkan();
     void createInstance();
+    void createSurface();
     void createMessenger();
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
@@ -31,7 +32,9 @@ private:
     GLFWwindow* window;
 
     VkQueue graphics_queue;
+    VkQueue present_queue;
 
+    VkSurfaceKHR surface;
     VkDevice device;
     VkPhysicalDevice physical_device = VK_NULL_HANDLE;
     VkInstance instance;

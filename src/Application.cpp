@@ -1,6 +1,12 @@
 #define GLFW_INCLUDE_VULKAN
+#define VK_USE_PLATFORM_WIN32_KHR
 #include <GLFW/glfw3.h>
+
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+
 #include "Application.hpp"
+
 #include <stdexcept>
 #include <vector>
 #include <cstring>
@@ -8,6 +14,7 @@
 #include <map>
 #include <string>
 #include <optional>
+#include <set>
 
 const std::vector<const char*> validation_layers = {
     "VK_LAYER_KHRONOS_validation"
@@ -27,9 +34,10 @@ const std::vector<const char*> validation_layers = {
 
 struct Application::QueueFamilyIndices{
     std::optional<uint32_t> graphics;
+    std::optional<uint32_t> present;
 
     bool is_complete(){
-        return graphics.has_value();
+        return graphics.has_value() && present.has_value();
     }
 };
 
@@ -56,6 +64,7 @@ void Application::initVulkan(){
     if(verbose)
         std::cout<< "initVulkan\n";
     createInstance();
+    createSurface();
     createMessenger();
     pickPhysicalDevice();
     createLogicalDevice();
@@ -162,6 +171,12 @@ void Application::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateIn
     createInfo.pUserData = nullptr;
 }
 
+void Application::createSurface(){
+    if(glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS){
+        throw std::runtime_error("Could not create surface for Windows.");
+    }
+}
+
 void Application::createMessenger(){
     if(!enable_validation_layers) return;
     if(verbose)
@@ -238,6 +253,14 @@ Application::QueueFamilyIndices Application::findQueueFamilies(VkPhysicalDevice 
         if(property.queueFlags & VK_QUEUE_GRAPHICS_BIT){
             indices.graphics = i;
         }
+        VkBool32 is_present = false;
+        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &is_present);
+        if(is_present){
+            indices.present = i;
+        }
+
+
+
 
         if(indices.is_complete()){
             break;
@@ -282,19 +305,26 @@ int Application::rateSuitability(VkPhysicalDevice physical_device) {
 void Application::createLogicalDevice(){
     QueueFamilyIndices indices = findQueueFamilies(physical_device);
 
-    VkDeviceQueueCreateInfo queue_create_info{};
-    queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queue_create_info.queueFamilyIndex = indices.graphics.value();
-    queue_create_info.queueCount = 1;
-    const float priority = 1.0f;
-    queue_create_info.pQueuePriorities = &priority;
+    std::set<uint32_t> nqueue_indices = {indices.graphics.value(), indices.present.value()};
+    std::vector<VkDeviceQueueCreateInfo> create_infos;
 
+    const float priority = 1.0f;
+
+    for(uint32_t indice : nqueue_indices){
+        VkDeviceQueueCreateInfo queue_create_info{};
+        queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queue_create_info.queueFamilyIndex = indice;
+        queue_create_info.queueCount = 1;
+        queue_create_info.pQueuePriorities = &priority;
+        create_infos.push_back(queue_create_info);
+
+    }
     VkPhysicalDeviceFeatures device_features{};
 
     VkDeviceCreateInfo device_create_info{};
     device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    device_create_info.pQueueCreateInfos = &queue_create_info;
-    device_create_info.queueCreateInfoCount = 1;
+    device_create_info.queueCreateInfoCount = static_cast<uint32_t>(create_infos.size());
+    device_create_info.pQueueCreateInfos = create_infos.data();
     device_create_info.pEnabledFeatures = &device_features;
 
     if(vkCreateDevice(physical_device, &device_create_info, nullptr, &device) != VK_SUCCESS){
@@ -302,6 +332,7 @@ void Application::createLogicalDevice(){
     }
 
     vkGetDeviceQueue(device, indices.graphics.value(), 0, &graphics_queue);
+    vkGetDeviceQueue(device, indices.present.value(), 0, &present_queue);
 
 }
 
@@ -323,6 +354,7 @@ void Application::cleanUp(){
         }
     }
     vkDestroyDevice(device, nullptr);
+    vkDestroySurfaceKHR(instance, surface, nullptr);
     vkDestroyInstance(instance, nullptr);
     glfwDestroyWindow(window);
     glfwTerminate();

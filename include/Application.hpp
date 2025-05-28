@@ -6,6 +6,14 @@ public:
     void run();
 private:
     struct QueueFamilyIndices;
+    struct SwapChainSupportDetails;
+
+    const std::vector<const char*> validation_layers = {
+        "VK_LAYER_KHRONOS_validation"
+    };
+    const std::vector<const char*> device_extensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    };
 
     void initWindow();
 
@@ -20,16 +28,31 @@ private:
 
     void pickPhysicalDevice();
     bool isDeviceSuitable(VkPhysicalDevice device);
+    bool checkDeviceExtensionSupport(VkPhysicalDevice device);
     int rateSuitability(VkPhysicalDevice device);
     Application::QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 
     void createLogicalDevice();
+
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
+    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
+    VkExtent2D chooseSwapExtent(VkSurfaceCapabilitiesKHR &capabilities);
+
+    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
+
+    void createSwapChain();
 
     void mainLoop();
 
     void cleanUp();
 
     GLFWwindow* window;
+
+    VkSwapchainKHR swapchain;
+    std::vector<VkImage> swapchain_images;
+    VkFormat swapchain_format;
+    VkExtent2D swapchain_extent;
+
 
     VkQueue graphics_queue;
     VkQueue present_queue;

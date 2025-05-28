@@ -57,5 +57,10 @@
         "typeinfo": "cpp",
         "variant": "cpp",
         "iomanip": "cpp"
+    },
+    "editor.quickSuggestions": {
+        "other": "on",
+        "comments": "off",
+        "strings": "off"
     }
 }

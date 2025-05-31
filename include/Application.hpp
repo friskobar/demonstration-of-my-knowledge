@@ -45,6 +45,7 @@ private:
     void createSwapChain();
     void createImageViews();
 
+    void createRenderPass();
     void createGraphicsPipeline();
 
     void mainLoop();
@@ -62,6 +63,7 @@ private:
     VkFormat swapchain_format;
     VkExtent2D swapchain_extent;
 
+    VkRenderPass render_pass;
     VkPipelineLayout pl_layout;
 
     VkQueue graphics_queue;

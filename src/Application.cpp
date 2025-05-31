@@ -74,6 +74,7 @@ void Application::initVulkan(){
     createLogicalDevice();
     createSwapChain();
     createImageViews();
+    createRenderPass();
     createGraphicsPipeline();
 }
 
@@ -510,6 +511,38 @@ void Application::createImageViews(){
     }
 }
 
+void Application::createRenderPass(){
+    VkAttachmentDescription attachment{};
+    attachment.format = swapchain_format;
+    attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference reference{};
+    reference.attachment = 0;
+    reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpassd{};
+    subpassd.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpassd.colorAttachmentCount = 1;
+    subpassd.pColorAttachments = &reference;
+
+    VkRenderPassCreateInfo render_pass_info{};
+    render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    render_pass_info.attachmentCount = 1;
+    render_pass_info.pAttachments = &attachment;
+    render_pass_info.subpassCount = 1;
+    render_pass_info.pSubpasses = &subpassd;
+
+    if(vkCreateRenderPass(device, &render_pass_info, nullptr, &render_pass) != VK_SUCCESS){
+        throw std::runtime_error("Could not create render pass.");
+    }
+}
+
 void Application::createGraphicsPipeline(){
     auto vert_code = readFile("shaders/compiled/default_vert.spv");
     auto frag_code = readFile("shaders/compiled/default_frag.spv");
@@ -650,6 +683,7 @@ void Application::cleanUp(){
     }
 
     vkDestroyPipelineLayout(device, pl_layout, nullptr);
+    vkDestroyRenderPass(device, render_pass, nullptr);
     vkDestroySwapchainKHR(device, swapchain, nullptr);
     vkDestroyDevice(device, nullptr);
     vkDestroySurfaceKHR(instance, surface, nullptr);

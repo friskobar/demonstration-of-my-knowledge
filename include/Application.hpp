@@ -1,6 +1,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <vector>
+#include <string>
+
 class Application{
 public:
     void run();
@@ -41,18 +43,26 @@ private:
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 
     void createSwapChain();
+    void createImageViews();
+
+    void createGraphicsPipeline();
 
     void mainLoop();
 
     void cleanUp();
 
+    static std::vector<char> readFile(const std::string& path);
+    VkShaderModule createShaderModule(const std::vector<char>& code);
+
     GLFWwindow* window;
 
     VkSwapchainKHR swapchain;
     std::vector<VkImage> swapchain_images;
+    std::vector<VkImageView> swapchain_views;
     VkFormat swapchain_format;
     VkExtent2D swapchain_extent;
 
+    VkPipelineLayout pl_layout;
 
     VkQueue graphics_queue;
     VkQueue present_queue;

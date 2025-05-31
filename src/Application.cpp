@@ -17,6 +17,7 @@
 #include <set>
 #include <limits>
 #include <algorithm>
+#include <fstream>
 
 #ifdef DEBUG
     const bool enable_validation_layers = true;
@@ -72,6 +73,8 @@ void Application::initVulkan(){
     pickPhysicalDevice();
     createLogicalDevice();
     createSwapChain();
+    createImageViews();
+    createGraphicsPipeline();
 }
 
 void Application::createInstance(){
@@ -483,6 +486,148 @@ void Application::createSwapChain(){
     swapchain_format = format.format;
 }
 
+void Application::createImageViews(){
+    swapchain_views.resize(swapchain_images.size());
+
+    for(size_t i = 0; i < swapchain_images.size(); i++){
+        VkImageViewCreateInfo create_info{};
+        create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        create_info.image = swapchain_images[i];
+        create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        create_info.format = swapchain_format;
+        create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        create_info.subresourceRange.baseMipLevel = 0;
+        create_info.subresourceRange.levelCount = 1;
+        create_info.subresourceRange.baseArrayLayer = 0;
+        create_info.subresourceRange.layerCount = 1;
+        if(vkCreateImageView(device, &create_info, nullptr, &swapchain_views[i]) != VK_SUCCESS){
+            throw std::runtime_error("Failed to create image view");
+        }
+    }
+}
+
+void Application::createGraphicsPipeline(){
+    auto vert_code = readFile("shaders/compiled/default_vert.spv");
+    auto frag_code = readFile("shaders/compiled/default_frag.spv");
+    
+    VkShaderModule vert_shader_module = createShaderModule(vert_code);
+    VkShaderModule frag_shader_module = createShaderModule(frag_code);
+
+    VkPipelineShaderStageCreateInfo vcreate_info{};
+    vcreate_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vcreate_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vcreate_info.module = vert_shader_module;
+    vcreate_info.pName = "main";
+    
+    VkPipelineShaderStageCreateInfo fcreate_info{};
+    fcreate_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fcreate_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fcreate_info.module = frag_shader_module;
+    fcreate_info.pName = "main";
+    
+    VkPipelineShaderStageCreateInfo shaderStages[] = {vcreate_info, fcreate_info};
+
+    //DYNAMIC STATES
+
+    std::vector<VkDynamicState> dynamic_states = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR
+    };
+
+    
+    VkPipelineDynamicStateCreateInfo dynamic_state_info{};
+    dynamic_state_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamic_state_info.dynamicStateCount = static_cast<uint32_t>(dynamic_states.size());
+    dynamic_state_info.pDynamicStates = dynamic_states.data();
+
+    //VERTEX INPUT - WHAT THE FUCK????????!?!!??!!!???
+
+    VkPipelineVertexInputStateCreateInfo vinput_info{};
+    vinput_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vinput_info.vertexBindingDescriptionCount = 0;
+    vinput_info.pVertexBindingDescriptions = nullptr;
+    vinput_info.vertexAttributeDescriptionCount = 0;
+    vinput_info.pVertexAttributeDescriptions = nullptr;
+
+    VkPipelineInputAssemblyStateCreateInfo assembly_info{};
+    assembly_info.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    assembly_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    assembly_info.primitiveRestartEnable = VK_FALSE;
+
+    //VIEWPORT
+
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (float) swapchain_extent.width;
+    viewport.height = (float) swapchain_extent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 0.0f;
+
+    VkRect2D scissors{};
+
+    scissors.offset = {0,0};
+    scissors.extent = swapchain_extent;
+
+    VkPipelineViewportStateCreateInfo vpstate_info{};
+    vpstate_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    vpstate_info.scissorCount = 1;
+    vpstate_info.viewportCount = 1;
+    //viewports and scissors will be defined later
+
+    //RASTERIZER
+
+    VkPipelineRasterizationStateCreateInfo rasterizer_info{};
+    rasterizer_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer_info.depthClampEnable = VK_FALSE; // clamps instead of discarding geometry that exceeds near/far planes
+    rasterizer_info.rasterizerDiscardEnable = VK_FALSE; //discards everything that goes into this state
+    rasterizer_info.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer_info.lineWidth = 1.0f;
+    rasterizer_info.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizer_info.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer_info.depthBiasEnable = VK_FALSE;
+    
+    //MULTISAMPLING
+    VkPipelineMultisampleStateCreateInfo multisample_info{};
+    multisample_info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisample_info.sampleShadingEnable = VK_FALSE;
+    multisample_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    //COLOR BLENDING - honestly i get the general idea but dont know exactly how it works
+    VkPipelineColorBlendAttachmentState colorbatt_state{};
+    colorbatt_state.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
+    colorbatt_state.blendEnable = VK_FALSE;
+    colorbatt_state.blendEnable = VK_TRUE;
+
+    VkPipelineColorBlendStateCreateInfo colorb_info{};
+    colorb_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorb_info.logicOpEnable = VK_FALSE;
+    colorb_info.attachmentCount = 1;
+    colorb_info.pAttachments = &colorbatt_state;
+    
+    //PIPELINE LAYOUT
+    //omfg fucking finally
+
+    VkPipelineLayoutCreateInfo layout_info{};
+    layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layout_info.pSetLayouts = nullptr;
+    layout_info.setLayoutCount = 0;
+    layout_info.pushConstantRangeCount = 0;
+    layout_info.pPushConstantRanges = nullptr;
+
+    if(vkCreatePipelineLayout(device, &layout_info, nullptr, &pl_layout) != VK_SUCCESS){
+        throw std::runtime_error("Could not create pipeline layout.");
+    }
+
+
+    vkDestroyShaderModule(device, frag_shader_module, nullptr);
+    vkDestroyShaderModule(device, vert_shader_module, nullptr);
+}
+
 void Application::mainLoop(){
     if(verbose)
         std::cout<< "mainLoop\n";
@@ -500,6 +645,11 @@ void Application::cleanUp(){
             func(instance, debug_messenger, nullptr);
         }
     }
+    for(VkImageView image_view : swapchain_views) {
+        vkDestroyImageView(device, image_view, nullptr);
+    }
+
+    vkDestroyPipelineLayout(device, pl_layout, nullptr);
     vkDestroySwapchainKHR(device, swapchain, nullptr);
     vkDestroyDevice(device, nullptr);
     vkDestroySurfaceKHR(instance, surface, nullptr);
@@ -507,3 +657,38 @@ void Application::cleanUp(){
     glfwDestroyWindow(window);
     glfwTerminate();
 };
+
+std::vector<char> Application::readFile(const std::string& path){
+    std::ifstream file(path, std::ios::ate | std::ios::binary);
+
+    if(!file.is_open()){
+        throw std::runtime_error("Could not open file.");
+    }
+
+    size_t file_size = (size_t) file.tellg();
+    std::vector<char> buffer(file_size);
+
+    file.seekg(0);
+    file.read(buffer.data(), file_size);
+
+    file.close();
+
+    return buffer;
+}
+
+VkShaderModule Application::createShaderModule(const std::vector<char>& code){
+    std::vector<char> frag = readFile("shader/compiled/default_frag.spv");
+    std::vector<char> vert = readFile("shader/compiled/default_vert.spv");
+
+    VkShaderModuleCreateInfo create_info{};
+    create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    create_info.codeSize = code.size();
+    create_info.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+    VkShaderModule module;
+    if(vkCreateShaderModule(device, &create_info, nullptr, &module) != VK_SUCCESS){
+        throw std::runtime_error("Failed to create shader module.");
+    }
+
+    return module;
+}

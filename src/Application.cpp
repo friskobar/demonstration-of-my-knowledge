@@ -711,9 +711,6 @@ std::vector<char> Application::readFile(const std::string& path){
 }
 
 VkShaderModule Application::createShaderModule(const std::vector<char>& code){
-    std::vector<char> frag = readFile("shader/compiled/default_frag.spv");
-    std::vector<char> vert = readFile("shader/compiled/default_vert.spv");
-
     VkShaderModuleCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     create_info.codeSize = code.size();

@@ -562,7 +562,7 @@ void Application::createGraphicsPipeline(){
     fcreate_info.module = frag_shader_module;
     fcreate_info.pName = "main";
     
-    VkPipelineShaderStageCreateInfo shaderStages[] = {vcreate_info, fcreate_info};
+    VkPipelineShaderStageCreateInfo shader_stages[] = {vcreate_info, fcreate_info};
 
     //DYNAMIC STATES
 
@@ -654,6 +654,32 @@ void Application::createGraphicsPipeline(){
 
     if(vkCreatePipelineLayout(device, &layout_info, nullptr, &pl_layout) != VK_SUCCESS){
         throw std::runtime_error("Could not create pipeline layout.");
+    }
+
+    //PIPELINE
+    //OH MY FUCKING GOD FUCKING FINALLY
+
+    VkGraphicsPipelineCreateInfo pipeline_info{};
+    pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipeline_info.stageCount = 2;
+    pipeline_info.pStages = shader_stages;
+    pipeline_info.pVertexInputState = &vinput_info;
+    pipeline_info.pInputAssemblyState = &assembly_info;
+    pipeline_info.pViewportState = &vpstate_info;
+    pipeline_info.pRasterizationState = &rasterizer_info;
+    pipeline_info.pMultisampleState = &multisample_info;
+    pipeline_info.pDepthStencilState = nullptr;
+    pipeline_info.pColorBlendState = &colorb_info;
+    pipeline_info.pDynamicState = &dynamic_state_info;
+    pipeline_info.layout = pl_layout;
+    pipeline_info.renderPass = render_pass;
+    pipeline_info.subpass = 0;
+
+    pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
+    pipeline_info.basePipelineIndex = -1;
+
+    if(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &graphics_pipeline) != VK_SUCCESS){
+        throw std::runtime_error("Could not create graphics pipeline.");
     }
 
 

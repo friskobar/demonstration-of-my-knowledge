@@ -65,6 +65,7 @@ private:
 
     VkRenderPass render_pass;
     VkPipelineLayout pl_layout;
+    VkPipeline graphics_pipeline;
 
     VkQueue graphics_queue;
     VkQueue present_queue;

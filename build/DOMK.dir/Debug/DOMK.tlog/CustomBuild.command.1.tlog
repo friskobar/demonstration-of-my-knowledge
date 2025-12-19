@@ -1,0 +1,10 @@
+^C:\USERS\ALEXA\ONEDRIVE\DOCUMENTOS\DEMONSTRATION OF MY KNOWLEDGE\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/alexa/OneDrive/Documentos/demonstration of my knowledge" "-BC:/Users/alexa/OneDrive/Documentos/demonstration of my knowledge/build" --check-stamp-file "C:/Users/alexa/OneDrive/Documentos/demonstration of my knowledge/build/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

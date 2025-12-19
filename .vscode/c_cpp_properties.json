@@ -4,18 +4,23 @@
             "name": "Win32",
             "includePath": [
                 "${workspaceFolder}\\**",
-                "C:\\VulkanSDK\\1.4.309.0\\Include"
+                "C:\\VulkanSDK\\1.4.321.1\\Include"
             ],
             "defines": [
                 "_DEBUG",
                 "UNICODE",
                 "_UNICODE"
             ],
-            "compilerPath": "C:/w64devkit/bin/g++.exe",
+            "compilerPath": "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe",
             "cStandard": "c17",
             "cppStandard": "c++17",
-            "intelliSenseMode": "windows-gcc-x64",
+            "intelliSenseMode": "windows-msvc-x64",
             "configurationProvider": "ms-vscode.makefile-tools"
+        },
+        {
+            "name": "CMake",
+            "compileCommands": "${config:cmake.buildDirectory}/compile_commands.json",
+            "configurationProvider": "ms-vscode.cmake-tools"
         }
     ],
     "version": 4

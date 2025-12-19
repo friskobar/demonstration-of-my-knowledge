@@ -1,0 +1,10 @@
+^C:\USERS\ALEXA\ONEDRIVE\DOCUMENTOS\DEMONSTRATION OF MY KNOWLEDGE\BUILD\CMAKEFILES\BCC5FC37BCFDF88CEC92078703F4A29B\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/alexa/OneDrive/Documentos/demonstration of my knowledge" "-BC:/Users/alexa/OneDrive/Documentos/demonstration of my knowledge/build" --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file "C:/Users/alexa/OneDrive/Documentos/demonstration of my knowledge/build/DOMK.sln"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

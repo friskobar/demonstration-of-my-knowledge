@@ -1,0 +1,14 @@
+{
+    "version": 1,
+    "revision": 0,
+    "rules": [
+        {
+            "primary-output": "DOMK.dir\\Debug\\main.obj",
+            "outputs": [
+                "C:\\Users\\alexa\\OneDrive\\Documentos\\demonstration of my knowledge\\build\\DOMK.dir\\Debug\\vc143.pdb",
+                "DOMK.dir\\Debug\\"
+            ],
+            "requires": []
+        }
+    ]
+}

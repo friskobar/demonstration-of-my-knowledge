@@ -5,6 +5,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 project(DOMK VERSION 0)
 
+find_package(Vulkan REQUIRED)
 find_package(GLFW3 REQUIRED)
 find_package(glm REQUIRED)
 
@@ -19,7 +20,7 @@ target_include_directories(DOMK PUBLIC "include")
 target_include_directories(DOMK PUBLIC "C:/VulkanSDK/1.4.321.1/Include")
 
 target_link_directories(DOMK PUBLIC "lib")
-target_link_libraries(DOMK "C:/VulkanSDK/1.4.321.1/Lib/vulkan-1.lib")
+target_link_libraries(DOMK Vulkan::Vulkan)
 target_link_libraries(DOMK glm.lib)
 target_link_libraries(DOMK glfw3dll.lib)
 target_link_libraries(DOMK tinyobjloader.lib)

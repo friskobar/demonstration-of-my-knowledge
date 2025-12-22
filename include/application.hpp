@@ -36,6 +36,7 @@ private:
     };
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
+    static void framebufferResizeCallback(GLFWwindow* window, int new_width, int new_height);
 
     static std::vector<char> readFile(const std::string& file_name);
 
@@ -92,6 +93,7 @@ private:
     std::vector<VkSemaphore> sps_image_available;
     std::vector<VkSemaphore> sps_render_finished;
     std::vector<VkFence> fs_flight;
+    bool framebuffer_resized = false;
 
     VkCommandPool cmdp;
     std::vector<VkCommandBuffer> cmdb;
@@ -103,6 +105,7 @@ private:
     GLFWwindow* window;
 
     uint32_t cur_frame = 0;
+
 
     const uint16_t START_WIDTH = 640;
     const uint16_t START_HEIGHT = 360;
@@ -120,7 +123,7 @@ private:
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
-    const int MAX_FLIGHT_FRAMES = 2;
+    const uint32_t MAX_FLIGHT_FRAMES = 2;
 
 
     const char* WINDOW_TITLE = "Demonstration of my knowledge.";

@@ -42,6 +42,12 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Application::debugCallback(VkDebugUtilsMessageSev
     return VK_FALSE;
 }
 
+//resize window callback
+void Application::framebufferResizeCallback(GLFWwindow* window, int new_width, int new_height){
+    Application* app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+    app->framebuffer_resized = true;
+}
+
 //Reads a file. byte. per. byte.
 std::vector<char> Application::readFile(const std::string& file_name){
     std::ifstream file(file_name, std::ios::ate | std::ios::binary);
@@ -69,9 +75,12 @@ void Application::initWindow() {
     glfwInit(); //Initialize GLFW
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // Turn off "OpenGL mode"
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); // Turn off resizing windows, will be turned on later
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE); // Turn ON resizing windows!
 
     window = glfwCreateWindow(START_WIDTH, START_HEIGHT, WINDOW_TITLE, nullptr, nullptr);
+    
+    glfwSetWindowUserPointer(window, this);
+    glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 }
 
 //Creates the Vulkan Instance.
@@ -326,7 +335,7 @@ void Application::createSwapChain(){
     VkSurfaceFormatKHR format = chooseFormat(details.formats);
     VkExtent2D extent = chooseSwapExtent(details.capabilities);
 
-    uint32_t image_count = std::min(details.capabilities.minImageCount + 1, details.capabilities.maxImageCount);
+    uint32_t image_count = std::max(std::min(MAX_FLIGHT_FRAMES, details.capabilities.maxImageCount), details.capabilities.minImageCount);
 
     VkSwapchainCreateInfoKHR ci{};
     ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -420,7 +429,6 @@ VkSurfaceFormatKHR Application::chooseFormat(const std::vector<VkSurfaceFormatKH
 
 /*
     Chooses swap extent
-    TODO - study swap extents and screen coordinates.
 */
 VkExtent2D Application::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
     if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
@@ -436,6 +444,9 @@ VkExtent2D Application::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabil
 
         actual_extent.width = std::clamp(actual_extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
         actual_extent.height = std::clamp(actual_extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+        std::cout << actual_extent.width << std::endl;
+        std::cout << actual_extent.height << std::endl;
 
         return actual_extent;
     }
@@ -520,6 +531,13 @@ void Application::createImageViews(){
 }
 
 void Application::recreateSwapChain(){
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(window, &width, &height);
+    while(width = 0 || height == 0){
+        glfwGetFramebufferSize(window, &width, &height);
+        glfwWaitEvents();
+    }
+
     vkDeviceWaitIdle(device);
 
     cleanupSwapChain();
@@ -827,8 +845,8 @@ void Application::recordCommandBuffer(VkCommandBuffer target, uint32_t image_ind
 }
 
 void Application::createSyncObjects(){
-    sps_image_available.resize(MAX_FLIGHT_FRAMES);
-    sps_render_finished.resize(MAX_FLIGHT_FRAMES);
+    sps_image_available.resize(sc_images.size());
+    sps_render_finished.resize(sc_images.size());
     fs_flight.resize(MAX_FLIGHT_FRAMES);
 
     VkSemaphoreCreateInfo sp_ci{};
@@ -845,8 +863,8 @@ void Application::createSyncObjects(){
         VkBool32 rf = vkCreateSemaphore(device, &sp_ci, nullptr, &sps_render_finished[i]);
         VkBool32 fl = vkCreateFence(device, &f_ci, nullptr, &fs_flight[i]);
         if(ia || rf || fl != VK_SUCCESS){
-            throw std::runtime_error("Couldn't create sync objects for a frame.");
-        } 
+                throw std::runtime_error("Couldn't create sync objects for a frame.");
+        }
     }
 }
 
@@ -854,12 +872,6 @@ void Application::createSyncObjects(){
 void Application::mainLoop() {
     while(!glfwWindowShouldClose(window)){ // while the window should'nt close:
         glfwPollEvents(); // poll glfw events
-        if(vkWaitForFences(device, 1, &fs_flight[cur_frame], VK_TRUE, UINT64_MAX) != VK_SUCCESS){
-            throw std::runtime_error("Couldnt wait for flight fences.");
-        }
-        if(vkResetFences(device, 1, &fs_flight[cur_frame]) != VK_SUCCESS){
-            throw std::runtime_error("Couldn't reset flight fences.");
-        }
         drawFrame();
     }
 
@@ -867,11 +879,25 @@ void Application::mainLoop() {
 }
 
 void Application::drawFrame(){
-    uint32_t image_index;
-    if (vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, sps_image_available[cur_frame], VK_NULL_HANDLE, &image_index) != VK_SUCCESS){
-        throw std::runtime_error("Couldn't aquire next image in the swapchain.");
+    if(vkWaitForFences(device, 1, &fs_flight[cur_frame], VK_TRUE, UINT64_MAX) != VK_SUCCESS){
+        throw std::runtime_error("Couldnt wait for flight fences.");
     }
     
+    uint32_t image_index;
+    VkResult next_image_result = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, sps_image_available[cur_frame], VK_NULL_HANDLE, &image_index);
+    
+    if(next_image_result == VK_ERROR_OUT_OF_DATE_KHR || framebuffer_resized){
+        framebuffer_resized = false;
+        recreateSwapChain();
+        return;
+    } else if(next_image_result != VK_SUCCESS && next_image_result != VK_SUBOPTIMAL_KHR){
+        throw std::runtime_error("Couldn't acquire next image in swapchain.");
+    }
+    
+    if(vkResetFences(device, 1, &fs_flight[cur_frame]) != VK_SUCCESS){
+        throw std::runtime_error("Couldn't reset flight fences.");
+    }
+
     if(vkResetCommandBuffer(cmdb[cur_frame], 0) != VK_SUCCESS){
         throw std::runtime_error("Couldn't reset command buffer.");
     }
@@ -909,10 +935,12 @@ void Application::drawFrame(){
     present_info.pSwapchains = swapchains;
     present_info.pImageIndices = &image_index;
 
-    if(vkQueuePresentKHR(present_queue, &present_info) != VK_SUCCESS){
-        throw std::runtime_error("Couldn't submit queue present commands.");
+    VkResult present_result = vkQueuePresentKHR(present_queue, &present_info);
+    if(present_result == VK_ERROR_OUT_OF_DATE_KHR || present_result == VK_SUBOPTIMAL_KHR || framebuffer_resized){
+        recreateSwapChain();
+    }else if(present_result != VK_SUCCESS){
+        throw std::runtime_error("Couldn't present swapchain images.");
     }
-
     cur_frame = (cur_frame + 1) % MAX_FLIGHT_FRAMES;
 }
 

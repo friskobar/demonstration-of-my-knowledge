@@ -17,7 +17,7 @@ add_executable(DOMK ${src} ${shaders})
 target_compile_features(DOMK PRIVATE cxx_std_23)
 
 target_include_directories(DOMK PUBLIC "include")
-target_include_directories(DOMK PUBLIC "C:/VulkanSDK/1.4.321.1/Include")
+target_include_directories(DOMK PUBLIC Vulkan::Headers)
 
 target_link_directories(DOMK PUBLIC "lib")
 target_link_libraries(DOMK Vulkan::Vulkan)

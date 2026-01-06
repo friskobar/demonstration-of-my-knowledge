@@ -1,8 +1,18 @@
 #include "application.hpp"
 
-//honestly i have no idea
+#include <stdexcept>
+#include <memory>
+#include <cstdint>
+#include <limits>
+#include <algorithm>
+#include <fstream>
+#include <map>
+#include <set>
+#include <iostream>
+
+//honestly I have no idea
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
     if (func != nullptr) {
         return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
     } else {
@@ -11,7 +21,8 @@ VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMes
 }
 
 void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
-    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+        vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
     if (func != nullptr) {
         func(instance, debugMessenger, pAllocator);
     }
@@ -31,8 +42,33 @@ void Application::run() {
 }
 
 
-bool Application::QueueFamilyIndices::isComplete(){
+bool Application::QueueFamilyIndices::isComplete() const{
     return graphics.has_value() && present.has_value();
+}
+
+VkVertexInputBindingDescription Application::Vertex::getBindingDescription() {
+    VkVertexInputBindingDescription description{};
+    description.binding = 0;
+    description.stride = sizeof(Vertex);
+    description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    return description;
+}
+
+std::array<VkVertexInputAttributeDescription, 2> Application::Vertex::getAttributeDescriptions() {
+    std::array<VkVertexInputAttributeDescription, 2> descriptions{};
+
+    descriptions[0].binding = 0;
+    descriptions[0].location = 0;
+    descriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    descriptions[0].offset = offsetof(Vertex, pos);
+
+    descriptions[1].binding = 0;
+    descriptions[1].location = 1;
+    descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    descriptions[1].offset = offsetof(Vertex, color);
+
+    return descriptions;
 }
 
 //Validation Layers messages
@@ -44,7 +80,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Application::debugCallback(VkDebugUtilsMessageSev
 
 //resize window callback
 void Application::framebufferResizeCallback(GLFWwindow* window, int new_width, int new_height){
-    Application* app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+    Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
     app->framebuffer_resized = true;
 }
 
@@ -95,6 +131,7 @@ void Application::initVulkan() {
     createRenderPass();
     createGraphicsPipeline();
     createFrameBuffers();
+    createVertexBuffer();
     createCommandPoolBuffer();
     createSyncObjects();
 }
@@ -103,7 +140,7 @@ void Application::initVulkan() {
     Checks if every validation layer is supported by the computer.
     A validation layer is a method for handling errors in Vulkan, since those are generally not handled.
 */
-bool Application::checkValidationLayerSupport() {
+bool Application::checkValidationLayerSupport() const {
     uint32_t layer_count = 0;
     vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
 
@@ -128,7 +165,7 @@ bool Application::checkValidationLayerSupport() {
 }
 
 //Gets all extensions required.
-std::vector<const char*> Application::getRequiredExtensions(){
+std::vector<const char*> Application::getRequiredExtensions() const {
     uint32_t glfw_extension_count = 0;
     const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
 
@@ -178,13 +215,13 @@ void Application::createInstance() {
 
     //apply glfw/vk extensions
 
-    std::vector<const char*> extensions = getRequiredExtensions();
+    const std::vector<const char*> extensions = getRequiredExtensions();
 
     create_info.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     create_info.ppEnabledExtensionNames = extensions.data();
     
     if(vkCreateInstance(&create_info, nullptr, &instance) != VK_SUCCESS){
-        throw std::runtime_error("Could'nt create Vulkan Instance!");
+        throw std::runtime_error("Couldn't create Vulkan Instance!");
     }
 
 }
@@ -202,12 +239,12 @@ void Application::setupDebugMessenger(){
 }
 
 //Populates the debug messenger Create Info
-void Application::populateDebugMessengerCI(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
-    createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    createInfo.pfnUserCallback = debugCallback;
+void Application::populateDebugMessengerCI(VkDebugUtilsMessengerCreateInfoEXT& create_info) {
+    create_info = {};
+    create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    create_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    create_info.pfnUserCallback = debugCallback;
 }
 
 //Creates the Vulkan surface to render images upon.
@@ -232,16 +269,16 @@ void Application::pickPhysicalDevice(){
 
     std::multimap<int, VkPhysicalDevice> map;
 
-    for(VkPhysicalDevice device : devices){
+    for(VkPhysicalDevice d : devices){
         VkPhysicalDeviceFeatures features;
-        vkGetPhysicalDeviceFeatures(device, &features);
+        vkGetPhysicalDeviceFeatures(d, &features);
 
         if(!features.geometryShader) continue;
 
         uint32_t device_score = 0;
         
         VkPhysicalDeviceProperties properties;
-        vkGetPhysicalDeviceProperties(device, &properties);
+        vkGetPhysicalDeviceProperties(d, &properties);
 
         if(properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU){
             device_score += 1;
@@ -249,7 +286,7 @@ void Application::pickPhysicalDevice(){
 
         device_score += properties.limits.maxImageDimension2D;
 
-        map.insert(std::make_pair(device_score, device));
+        map.insert(std::make_pair(device_score, d));
     }
 
     if(map.empty()){
@@ -259,7 +296,7 @@ void Application::pickPhysicalDevice(){
 }
 
 //Checks if a Physical Device(GPU) is suitable for usage
-bool Application::isDeviceSuitable(VkPhysicalDevice target, VkPhysicalDeviceFeatures& features, VkPhysicalDeviceProperties& properties){
+bool Application::isDeviceSuitable(VkPhysicalDevice target, VkPhysicalDeviceFeatures& features, VkPhysicalDeviceProperties& properties) const {
     vkGetPhysicalDeviceFeatures(target, &features);
     vkGetPhysicalDeviceProperties(target, &properties);
 
@@ -270,7 +307,7 @@ bool Application::isDeviceSuitable(VkPhysicalDevice target, VkPhysicalDeviceFeat
     bool swapchain_adequate = false;
     if(extensions_supported){
         SwapChainSupportDetails details = querySwapchainSupport(target);
-        swapchain_adequate = !details.formats.empty() && !details.formats.empty();
+        swapchain_adequate = !details.formats.empty();
     }
 
     return indices.isComplete() && extensions_supported && swapchain_adequate;
@@ -278,7 +315,7 @@ bool Application::isDeviceSuitable(VkPhysicalDevice target, VkPhysicalDeviceFeat
 }
 
 //Checks if a Physical Device(GPU) supports all required extensions
-bool Application::checkDeviceExtensionsSupported(VkPhysicalDevice target){
+bool Application::checkDeviceExtensionsSupported(VkPhysicalDevice target) const {
     uint32_t extension_count;
     vkEnumerateDeviceExtensionProperties(target, nullptr, &extension_count, nullptr);
 
@@ -295,7 +332,7 @@ bool Application::checkDeviceExtensionsSupported(VkPhysicalDevice target){
 }
 
 //Finds all queueFamilies supported by the Physical Device
-Application::QueueFamilyIndices Application::findQueueFamilies(VkPhysicalDevice target){
+Application::QueueFamilyIndices Application::findQueueFamilies(VkPhysicalDevice target) const {
     QueueFamilyIndices indices;
 
     uint32_t family_count;
@@ -381,7 +418,7 @@ void Application::createSwapChain(){
 }
 
 //Populates SwapChainSupportDetails based on the VkPhysicalDevice.
-Application::SwapChainSupportDetails Application::querySwapchainSupport(VkPhysicalDevice target){
+Application::SwapChainSupportDetails Application::querySwapchainSupport(VkPhysicalDevice target) const {
     Application::SwapChainSupportDetails details;
 
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(target, surface, &details.capabilities);
@@ -533,7 +570,7 @@ void Application::createImageViews(){
 void Application::recreateSwapChain(){
     int width = 0, height = 0;
     glfwGetFramebufferSize(window, &width, &height);
-    while(width = 0 || height == 0){
+    while(width == 0 || height == 0){
         glfwGetFramebufferSize(window, &width, &height);
         glfwWaitEvents();
     }
@@ -637,12 +674,15 @@ void Application::createGraphicsPipeline(){
     dyn_ci.pDynamicStates = dynamic_states.data();
     dyn_ci.dynamicStateCount = static_cast<uint32_t>(dynamic_states.size());
 
+    VkVertexInputBindingDescription binding_description = Vertex::getBindingDescription();
+    std::array<VkVertexInputAttributeDescription, 2> att_description = Vertex::getAttributeDescriptions();
+
     VkPipelineVertexInputStateCreateInfo vertinput_ci{};
     vertinput_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertinput_ci.vertexBindingDescriptionCount = 0;
-    vertinput_ci.pVertexBindingDescriptions = nullptr;
-    vertinput_ci.vertexAttributeDescriptionCount = 0;
-    vertinput_ci.pVertexAttributeDescriptions = nullptr;
+    vertinput_ci.vertexBindingDescriptionCount = 1;
+    vertinput_ci.pVertexBindingDescriptions = &binding_description;
+    vertinput_ci.vertexAttributeDescriptionCount = static_cast<uint32_t>(att_description.size());;
+    vertinput_ci.pVertexAttributeDescriptions = att_description.data();
 
     VkPipelineInputAssemblyStateCreateInfo input_ci{};
     input_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -772,6 +812,50 @@ void Application::createFrameBuffers(){
     }
 }
 
+void Application::createVertexBuffer(){
+    VkBufferCreateInfo ci{};
+    ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    ci.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    ci.size = sizeof(vertexi[0]) * vertexi.size();
+
+    if(vkCreateBuffer(device, &ci, nullptr, &vertex_buffer) != VK_SUCCESS){
+        throw std::runtime_error("Couldn't create vertex buffer. 🥀");
+    }
+
+    VkMemoryRequirements mem_req{};
+    vkGetBufferMemoryRequirements(device, vertex_buffer, &mem_req);
+
+    VkMemoryAllocateInfo mem_info{};
+    mem_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    mem_info.allocationSize = mem_req.size;
+    mem_info.memoryTypeIndex = findMemoryType(mem_req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    if(vkAllocateMemory(device, &mem_info, nullptr, &vertex_mem) != VK_SUCCESS){
+        throw std::runtime_error("Couldn't allocate vertex memory. 🥀");
+    }
+
+    vkBindBufferMemory(device, vertex_buffer, vertex_mem, 0);
+
+    void* data;
+    vkMapMemory(device, vertex_mem, 0, ci.size, 0, &data);
+    memcpy(data, vertexi.data(), (size_t) ci.size);
+    vkUnmapMemory(device, vertex_mem);
+}
+
+uint32_t Application::findMemoryType(uint32_t type_filter, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties mem_prop;
+    vkGetPhysicalDeviceMemoryProperties(p_device, &mem_prop);
+
+    for (uint32_t i = 0; i < mem_prop.memoryTypeCount; i++) {
+        if ((type_filter & (1 << i)) && (mem_prop.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+
+    throw std::runtime_error("failed to find suitable memory type!");
+}
+
 void Application::createCommandPoolBuffer(){
 
     QueueFamilyIndices indices = findQueueFamilies(p_device);
@@ -821,6 +905,10 @@ void Application::recordCommandBuffer(VkCommandBuffer target, uint32_t image_ind
 
     vkCmdBindPipeline(cmdb[cur_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
+    VkBuffer vert_buffers = {vertex_buffer};
+    VkDeviceSize offsets = {0};
+    vkCmdBindVertexBuffers(cmdb[cur_frame], 0, 1, &vert_buffers, &offsets);
+
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -835,7 +923,7 @@ void Application::recordCommandBuffer(VkCommandBuffer target, uint32_t image_ind
     scissor.extent = sc_extent;
     vkCmdSetScissor(cmdb[cur_frame], 0, 1, &scissor);
 
-    vkCmdDraw(cmdb[cur_frame], 3, 1, 0, 0);
+    vkCmdDraw(cmdb[cur_frame], static_cast<uint32_t>(vertexi.size()), 1, 0, 0);
 
     vkCmdEndRenderPass(cmdb[cur_frame]);
 
@@ -878,6 +966,7 @@ void Application::mainLoop() {
     vkDeviceWaitIdle(device);
 }
 
+//draws current frame and presents last one
 void Application::drawFrame(){
     if(vkWaitForFences(device, 1, &fs_flight[cur_frame], VK_TRUE, UINT64_MAX) != VK_SUCCESS){
         throw std::runtime_error("Couldnt wait for flight fences.");
@@ -958,6 +1047,9 @@ void Application::cleanUp() {
 
    
     cleanupSwapChain(); // DESTROY SWAPCHAIN
+
+    vkDestroyBuffer(device, vertex_buffer, nullptr);
+    vkFreeMemory(device, vertex_mem, nullptr);
 
     vkDestroyCommandPool(device, cmdp, nullptr); // DESTROY COMMAND POOL
 

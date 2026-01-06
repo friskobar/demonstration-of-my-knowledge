@@ -1,20 +1,13 @@
+#pragma once
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include <string>
-#include <memory>
-#include <iostream>
-#include <stdexcept>
-#include <cstdlib>
 #include <iostream>
 #include <vector>
-#include <map>
-#include <set>
 #include <optional>
-#include <cstdint>
-#include <limits>
-#include <algorithm>
-#include <fstream>
+#include <glm/glm.hpp>
+#include <array>
 
 class Application{
 public:
@@ -25,8 +18,9 @@ private:
     struct QueueFamilyIndices{
         std::optional<uint32_t> graphics;
         std::optional<uint32_t> present;
+        std::optional<uint32_t> transfer;
 
-        bool isComplete();
+        bool isComplete() const;
     };
 
     struct SwapChainSupportDetails{
@@ -35,28 +29,38 @@ private:
         std::vector<VkSurfaceFormatKHR> formats;
     };
 
+    struct Vertex{
+        glm::vec2 pos;
+        glm::vec3 color;
+
+        static VkVertexInputBindingDescription getBindingDescription();
+        static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions();
+    };
+
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
     static void framebufferResizeCallback(GLFWwindow* window, int new_width, int new_height);
 
     static std::vector<char> readFile(const std::string& file_name);
+    static void populateDebugMessengerCI(VkDebugUtilsMessengerCreateInfoEXT& create_info);
 
     void initWindow();
     void initVulkan();
-    bool checkValidationLayerSupport();
-    std::vector<const char*> getRequiredExtensions();
+    bool checkValidationLayerSupport() const;
+    std::vector<const char*> getRequiredExtensions() const;
     void createInstance();
     void setupDebugMessenger();
-    void populateDebugMessengerCI(VkDebugUtilsMessengerCreateInfoEXT& create_info);
     void createSurface();
     void pickPhysicalDevice();
-    bool isDeviceSuitable(VkPhysicalDevice target, VkPhysicalDeviceFeatures& features, VkPhysicalDeviceProperties& properties);
-    bool checkDeviceExtensionsSupported(VkPhysicalDevice target);
-    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice target);
+    bool isDeviceSuitable(VkPhysicalDevice target, VkPhysicalDeviceFeatures& features, VkPhysicalDeviceProperties& properties) const;
+    bool checkDeviceExtensionsSupported(VkPhysicalDevice target) const;
+    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice target) const;
     void createLogicalDevice();
     void createSwapChain();
-    SwapChainSupportDetails querySwapchainSupport(VkPhysicalDevice target);
-    VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR>& available_modes);
-    VkSurfaceFormatKHR chooseFormat(const std::vector<VkSurfaceFormatKHR>& available_formats);
+    SwapChainSupportDetails querySwapchainSupport(VkPhysicalDevice target) const;
+
+    static VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR>& available_modes);
+
+    static VkSurfaceFormatKHR chooseFormat(const std::vector<VkSurfaceFormatKHR>& available_formats);
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
     void createImageViews();
     void recreateSwapChain();
@@ -65,6 +69,8 @@ private:
     void createGraphicsPipeline();
     VkShaderModule createShaderModule(const std::string& path);
     void createFrameBuffers();
+    void createVertexBuffer();
+    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     void createCommandPoolBuffer();
     void recordCommandBuffer(VkCommandBuffer buffer, uint32_t image_index);
     void createSyncObjects();
@@ -72,37 +78,40 @@ private:
     void drawFrame();
     void cleanUp();
 
-    VkInstance instance;
+    VkInstance instance = nullptr;
 
     VkPhysicalDevice p_device = VK_NULL_HANDLE;
-    VkDevice device;
-    VkQueue graphics_queue;
-    VkQueue present_queue;
+    VkDevice device = nullptr;
+    VkQueue graphics_queue = nullptr;
+    VkQueue present_queue = nullptr;
 
-    VkSwapchainKHR swapchain;
+    VkBuffer vertex_buffer = nullptr;
+    VkDeviceMemory vertex_mem = nullptr;
+
+    VkSwapchainKHR swapchain = nullptr;
     std::vector<VkImage> sc_images;
     std::vector<VkImageView> sc_views;
     VkFormat sc_format;
     VkExtent2D sc_extent;
     std::vector<VkFramebuffer> sc_fb;
 
-    VkRenderPass render_pass;
-    VkPipelineLayout pl_layout;
-    VkPipeline pipeline;
+    VkRenderPass render_pass = nullptr;
+    VkPipelineLayout pl_layout = nullptr;
+    VkPipeline pipeline = nullptr;
 
     std::vector<VkSemaphore> sps_image_available;
     std::vector<VkSemaphore> sps_render_finished;
     std::vector<VkFence> fs_flight;
     bool framebuffer_resized = false;
 
-    VkCommandPool cmdp;
+    VkCommandPool cmdp = nullptr;
     std::vector<VkCommandBuffer> cmdb;
 
-    VkDebugUtilsMessengerEXT debug_messenger;
+    VkDebugUtilsMessengerEXT debug_messenger = nullptr;
 
-    VkSurfaceKHR surface;
+    VkSurfaceKHR surface = nullptr;
 
-    GLFWwindow* window;
+    GLFWwindow* window = nullptr;
 
     uint32_t cur_frame = 0;
 
@@ -125,6 +134,11 @@ private:
 
     const uint32_t MAX_FLIGHT_FRAMES = 2;
 
+    const std::vector<Vertex>vertexi = {
+        {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+    };
 
     const char* WINDOW_TITLE = "Demonstration of my knowledge.";
 };

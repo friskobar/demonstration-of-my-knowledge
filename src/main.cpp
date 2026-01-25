@@ -1,5 +1,7 @@
 #include "application.hpp"
 
+#include <iostream>
+
 int main(){
     std::cout << "Demonstration of my knowledge.";
 

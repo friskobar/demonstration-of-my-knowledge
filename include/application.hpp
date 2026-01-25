@@ -3,9 +3,8 @@
 #include <GLFW/glfw3.h>
 
 #include <string>
-#include <iostream>
-#include <vector>
 #include <optional>
+#include <vector>
 #include <glm/glm.hpp>
 #include <array>
 
@@ -37,11 +36,24 @@ private:
         static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions();
     };
 
+    struct BufferCreateInfo{
+        VkDeviceSize size;
+        VkBufferUsageFlags usage;
+        VkMemoryPropertyFlags properties;
+        VkBuffer* buffer;
+        VkDeviceMemory* buffer_memory;
+        VkSharingMode sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+        uint32_t* indices;
+        uint32_t family_count;
+    };
+
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
     static void framebufferResizeCallback(GLFWwindow* window, int new_width, int new_height);
 
     static std::vector<char> readFile(const std::string& file_name);
     static void populateDebugMessengerCI(VkDebugUtilsMessengerCreateInfoEXT& create_info);
+    void createBuffer(BufferCreateInfo *create_info);
+    void copyBuffer(VkBuffer srcb, VkBuffer dstb, VkDeviceSize size);
 
     void initWindow();
     void initVulkan();
@@ -84,6 +96,7 @@ private:
     VkDevice device = nullptr;
     VkQueue graphics_queue = nullptr;
     VkQueue present_queue = nullptr;
+    VkQueue transfer_queue = nullptr;
 
     VkBuffer vertex_buffer = nullptr;
     VkDeviceMemory vertex_mem = nullptr;
@@ -104,8 +117,12 @@ private:
     std::vector<VkFence> fs_flight;
     bool framebuffer_resized = false;
 
+    //command pool graphics family
     VkCommandPool cmdp = nullptr;
     std::vector<VkCommandBuffer> cmdb;
+    
+    //command pool transfer family
+    VkCommandPool cmdp_t = nullptr;
 
     VkDebugUtilsMessengerEXT debug_messenger = nullptr;
 

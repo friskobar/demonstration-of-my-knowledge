@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.20)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -15,7 +15,7 @@ file(GLOB shaders "shaders/*.spv")
 
 add_executable(DOMK ${src} ${shaders})
 
-target_compile_features(DOMK PRIVATE cxx_std_23)
+target_compile_features(DOMK PRIVATE cxx_std_20)
 
 target_include_directories(DOMK PUBLIC "include")
 target_include_directories(DOMK PUBLIC Vulkan::Headers)

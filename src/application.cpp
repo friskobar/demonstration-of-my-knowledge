@@ -1,7 +1,6 @@
 #include "application.hpp"
 
 #include <stdexcept>
-#include <memory>
 #include <cstdint>
 #include <limits>
 #include <algorithm>
@@ -9,6 +8,7 @@
 #include <map>
 #include <set>
 #include <iostream>
+#include <vector>
 
 //honestly I have no idea
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
@@ -43,7 +43,7 @@ void Application::run() {
 
 
 bool Application::QueueFamilyIndices::isComplete() const{
-    return graphics.has_value() && present.has_value();
+    return graphics.has_value() && present.has_value() && transfer.has_value();
 }
 
 VkVertexInputBindingDescription Application::Vertex::getBindingDescription() {
@@ -103,6 +103,36 @@ std::vector<char> Application::readFile(const std::string& file_name){
     return buffer;
 }
 
+//Create buffer
+void Application::createBuffer(Application::BufferCreateInfo *create_info){
+    VkBufferCreateInfo bci{};
+    bci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bci.size = create_info->size;
+    bci.usage = create_info->usage;
+    bci.sharingMode = create_info->sharing_mode;
+    bci.pQueueFamilyIndices = create_info->indices;
+    bci.queueFamilyIndexCount = create_info->family_count;
+
+
+    if(vkCreateBuffer(device, &bci, nullptr, create_info->buffer) != VK_SUCCESS){
+        throw std::runtime_error("Could'nt create buffer.");
+    }
+
+    VkMemoryRequirements memreq;
+    vkGetBufferMemoryRequirements(device, *create_info->buffer, &memreq);
+
+    VkMemoryAllocateInfo alloci{};
+    alloci.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloci.allocationSize = memreq.size;
+    alloci.memoryTypeIndex = findMemoryType(memreq.memoryTypeBits, create_info->properties);
+
+    if(vkAllocateMemory(device, &alloci, nullptr, create_info->buffer_memory) != VK_SUCCESS){
+        throw std::runtime_error("Failed to allocate buffer memory.");
+    }
+
+    vkBindBufferMemory(device, *create_info->buffer, *create_info->buffer_memory, 0);
+}
+
 /*
     Initializes GLFW(makes opening cross-platform windows easier).
     Creates the window and sets it to the "window" pointer.
@@ -131,8 +161,8 @@ void Application::initVulkan() {
     createRenderPass();
     createGraphicsPipeline();
     createFrameBuffers();
-    createVertexBuffer();
     createCommandPoolBuffer();
+    createVertexBuffer();
     createSyncObjects();
 }
 
@@ -346,6 +376,9 @@ Application::QueueFamilyIndices Application::findQueueFamilies(VkPhysicalDevice 
         if (family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             indices.graphics = i;
         }
+        if (family.queueFlags & VK_QUEUE_TRANSFER_BIT){
+            indices.transfer = i;
+        }
 
         VkBool32 present_support = false;
         vkGetPhysicalDeviceSurfaceSupportKHR(target, i, surface, &present_support);
@@ -474,10 +507,7 @@ VkExtent2D Application::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabil
         int width, height;
         glfwGetFramebufferSize(window, &width, &height);
 
-        VkExtent2D actual_extent = {
-            static_cast<uint32_t>(width),
-            static_cast<uint32_t>(height)
-        };
+        VkExtent2D actual_extent{};
 
         actual_extent.width = std::clamp(actual_extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
         actual_extent.height = std::clamp(actual_extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
@@ -496,7 +526,8 @@ void Application::createLogicalDevice(){
     std::vector<VkDeviceQueueCreateInfo> cis;
     std::set<uint32_t> families = {
         indices.graphics.value(),
-        indices.present.value()
+        indices.present.value(),
+        indices.transfer.value()
     };
 
     float priority = 1.0f;
@@ -537,7 +568,7 @@ void Application::createLogicalDevice(){
 
     vkGetDeviceQueue(device, indices.graphics.value(), 0, &graphics_queue);
     vkGetDeviceQueue(device, indices.present.value(), 0, &present_queue);
-
+    vkGetDeviceQueue(device, indices.transfer.value(), 0, &transfer_queue);
 }
 
 //Creates the an image view for each VkImage in sc_images.
@@ -813,34 +844,85 @@ void Application::createFrameBuffers(){
 }
 
 void Application::createVertexBuffer(){
-    VkBufferCreateInfo ci{};
-    ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    ci.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    ci.size = sizeof(vertexi[0]) * vertexi.size();
+    QueueFamilyIndices qfi = findQueueFamilies(p_device);
 
-    if(vkCreateBuffer(device, &ci, nullptr, &vertex_buffer) != VK_SUCCESS){
-        throw std::runtime_error("Couldn't create vertex buffer. 🥀");
-    }
+    VkBuffer staging_buffer;
+    VkDeviceMemory staging_memory;
 
-    VkMemoryRequirements mem_req{};
-    vkGetBufferMemoryRequirements(device, vertex_buffer, &mem_req);
+    VkDeviceSize bsize = sizeof(vertexi[0]) * vertexi.size();
+    BufferCreateInfo sci{};
+    sci.buffer = &staging_buffer;
+    sci.buffer_memory = &staging_memory;
+    sci.properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    sci.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    sci.size = sizeof(vertexi[0]) * vertexi.size();
+    uint32_t sindices[1] = {qfi.transfer.value()};
+    sci.indices = sindices;
+    sci.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+    sci.family_count = 1;
 
-    VkMemoryAllocateInfo mem_info{};
-    mem_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    mem_info.allocationSize = mem_req.size;
-    mem_info.memoryTypeIndex = findMemoryType(mem_req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-    if(vkAllocateMemory(device, &mem_info, nullptr, &vertex_mem) != VK_SUCCESS){
-        throw std::runtime_error("Couldn't allocate vertex memory. 🥀");
-    }
-
-    vkBindBufferMemory(device, vertex_buffer, vertex_mem, 0);
+    createBuffer(&sci);
 
     void* data;
-    vkMapMemory(device, vertex_mem, 0, ci.size, 0, &data);
-    memcpy(data, vertexi.data(), (size_t) ci.size);
-    vkUnmapMemory(device, vertex_mem);
+    vkMapMemory(device, staging_memory, 0, bsize, 0, &data);
+    memcpy(data, vertexi.data(), (size_t) bsize);
+    vkUnmapMemory(device, staging_memory);
+    
+    BufferCreateInfo ci{};
+    ci.buffer = &vertex_buffer;
+    ci.buffer_memory = &vertex_mem;
+    ci.properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    ci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    ci.size = sizeof(vertexi[0]) * vertexi.size();
+    if(qfi.transfer.value() == qfi.graphics.value()){
+        ci.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+        ci.family_count = 1;
+        ci.indices = sindices;
+    } else {
+        uint32_t indices[2] = {qfi.transfer.value(), qfi.graphics.value()};
+        ci.indices = indices;
+        ci.sharing_mode = VK_SHARING_MODE_CONCURRENT;
+        ci.family_count = 2;
+    }
+
+    createBuffer(&ci);
+
+    copyBuffer(staging_buffer, vertex_buffer, bsize);
+
+    vkDestroyBuffer(device, staging_buffer, nullptr);
+    vkFreeMemory(device, staging_memory, nullptr);
+}
+
+void Application::copyBuffer(VkBuffer srcb, VkBuffer dstb, VkDeviceSize size){
+    VkCommandBufferAllocateInfo aci{};
+    aci.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    aci.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    aci.commandPool = cmdp_t; 
+    aci.commandBufferCount = 1;
+
+    VkCommandBuffer command_buffer;
+    vkAllocateCommandBuffers(device, &aci, &command_buffer);
+
+    VkCommandBufferBeginInfo bi{}; //begininfo
+    bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(command_buffer, &bi);
+
+    VkBufferCopy copyr{}; //copy region
+    copyr.size = size;
+    vkCmdCopyBuffer(command_buffer, srcb, dstb, 1, &copyr);
+
+    vkEndCommandBuffer(command_buffer);
+
+    VkSubmitInfo submit{};
+    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &command_buffer;
+
+    vkQueueSubmit(transfer_queue, 1, &submit, VK_NULL_HANDLE);
+    vkQueueWaitIdle(transfer_queue);
+    vkFreeCommandBuffers(device, cmdp_t, 1, &command_buffer);
 }
 
 uint32_t Application::findMemoryType(uint32_t type_filter, VkMemoryPropertyFlags properties) {
@@ -857,7 +939,7 @@ uint32_t Application::findMemoryType(uint32_t type_filter, VkMemoryPropertyFlags
 }
 
 void Application::createCommandPoolBuffer(){
-
+    //graphics pool
     QueueFamilyIndices indices = findQueueFamilies(p_device);
 
     VkCommandPoolCreateInfo ci{};
@@ -878,7 +960,16 @@ void Application::createCommandPoolBuffer(){
     buffer_i.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 
     if(vkAllocateCommandBuffers(device, &buffer_i, &cmdb[cur_frame]) != VK_SUCCESS) {
-        throw std::runtime_error("Couldn't allocate command buffers.");
+        throw std::runtime_error("Couldn't allocate graphics command buffers.");
+    }
+
+    //transfer pool
+    VkCommandPoolCreateInfo cit{};
+    cit.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    cit.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    cit.queueFamilyIndex = indices.transfer.value();
+    if(vkCreateCommandPool(device, &cit, nullptr, &cmdp_t) != VK_SUCCESS){
+        throw std::runtime_error("Couldn't create transfer command pool.");
     }
 }
 

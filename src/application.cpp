@@ -163,6 +163,7 @@ void Application::initVulkan() {
     createFrameBuffers();
     createCommandPoolBuffer();
     createVertexBuffer();
+    createIndexBuffer();
     createSyncObjects();
 }
 
@@ -879,8 +880,8 @@ void Application::createVertexBuffer(){
         ci.family_count = 1;
         ci.indices = sindices;
     } else {
-        uint32_t indices[2] = {qfi.transfer.value(), qfi.graphics.value()};
-        ci.indices = indices;
+        uint32_t iindices[2] = {qfi.transfer.value(), qfi.graphics.value()};
+        ci.indices = iindices;
         ci.sharing_mode = VK_SHARING_MODE_CONCURRENT;
         ci.family_count = 2;
     }
@@ -891,6 +892,54 @@ void Application::createVertexBuffer(){
 
     vkDestroyBuffer(device, staging_buffer, nullptr);
     vkFreeMemory(device, staging_memory, nullptr);
+}
+
+void Application::createIndexBuffer(){
+    QueueFamilyIndices qfi = findQueueFamilies(p_device);
+    VkDeviceSize size = sizeof(indices[0]) * indices.size();
+
+    uint32_t sindices[1] = {qfi.transfer.value()};
+
+    VkBuffer sbuffer;
+    VkDeviceMemory smem;
+    BufferCreateInfo sci{};
+    sci.size = size;
+    sci.buffer = &sbuffer;
+    sci.buffer_memory = &smem;
+    sci.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    sci.properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    sci.indices = sindices;
+    sci.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+    createBuffer(&sci);
+
+    void* data;
+    vkMapMemory(device, smem, 0, size, 0, &data);
+    memcpy(data, indices.data(), (size_t) size);
+    vkUnmapMemory(device, smem);
+
+    BufferCreateInfo ci{};
+    ci.size = size;
+    ci.buffer = &index_buffer;
+    ci.buffer_memory = &index_mem;
+    ci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    ci.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    
+    if(qfi.transfer.value() == qfi.graphics.value()){
+        ci.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+        ci.family_count = 1;
+        ci.indices = sindices;
+    } else {
+        uint32_t iindices[2] = {qfi.transfer.value(), qfi.graphics.value()};
+        ci.indices = iindices;
+        ci.sharing_mode = VK_SHARING_MODE_CONCURRENT;
+        ci.family_count = 2;
+    }
+    createBuffer(&ci);
+
+    copyBuffer(sbuffer, index_buffer, size);
+
+    vkDestroyBuffer(device, sbuffer, nullptr);
+    vkFreeMemory(device, smem, nullptr);
 }
 
 void Application::copyBuffer(VkBuffer srcb, VkBuffer dstb, VkDeviceSize size){
@@ -935,7 +984,7 @@ uint32_t Application::findMemoryType(uint32_t type_filter, VkMemoryPropertyFlags
         }
     }
 
-    throw std::runtime_error("failed to find suitable memory type!");
+    throw std::runtime_error("Failed to find suitable memory type.");
 }
 
 void Application::createCommandPoolBuffer(){
@@ -1000,6 +1049,8 @@ void Application::recordCommandBuffer(VkCommandBuffer target, uint32_t image_ind
     VkDeviceSize offsets = {0};
     vkCmdBindVertexBuffers(cmdb[cur_frame], 0, 1, &vert_buffers, &offsets);
 
+    vkCmdBindIndexBuffer(cmdb[cur_frame], index_buffer, 0, VK_INDEX_TYPE_UINT16);
+    
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -1014,7 +1065,7 @@ void Application::recordCommandBuffer(VkCommandBuffer target, uint32_t image_ind
     scissor.extent = sc_extent;
     vkCmdSetScissor(cmdb[cur_frame], 0, 1, &scissor);
 
-    vkCmdDraw(cmdb[cur_frame], static_cast<uint32_t>(vertexi.size()), 1, 0, 0);
+    vkCmdDrawIndexed(cmdb[cur_frame], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
     vkCmdEndRenderPass(cmdb[cur_frame]);
 
@@ -1141,6 +1192,8 @@ void Application::cleanUp() {
 
     vkDestroyBuffer(device, vertex_buffer, nullptr);
     vkFreeMemory(device, vertex_mem, nullptr);
+    vkDestroyBuffer(device, index_buffer, nullptr);
+    vkFreeMemory(device, index_mem, nullptr);
 
     vkDestroyCommandPool(device, cmdp, nullptr); // DESTROY COMMAND POOL
 

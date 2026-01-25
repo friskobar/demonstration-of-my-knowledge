@@ -42,7 +42,7 @@ private:
         VkMemoryPropertyFlags properties;
         VkBuffer* buffer;
         VkDeviceMemory* buffer_memory;
-        VkSharingMode sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+        VkSharingMode sharing_mode;
         uint32_t* indices;
         uint32_t family_count;
     };
@@ -82,6 +82,7 @@ private:
     VkShaderModule createShaderModule(const std::string& path);
     void createFrameBuffers();
     void createVertexBuffer();
+    void createIndexBuffer();
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     void createCommandPoolBuffer();
     void recordCommandBuffer(VkCommandBuffer buffer, uint32_t image_index);
@@ -100,6 +101,8 @@ private:
 
     VkBuffer vertex_buffer = nullptr;
     VkDeviceMemory vertex_mem = nullptr;
+    VkBuffer index_buffer = nullptr;
+    VkDeviceMemory index_mem = nullptr;
 
     VkSwapchainKHR swapchain = nullptr;
     std::vector<VkImage> sc_images;
@@ -151,10 +154,15 @@ private:
 
     const uint32_t MAX_FLIGHT_FRAMES = 2;
 
-    const std::vector<Vertex>vertexi = {
-        {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-        {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+    const std::vector<Vertex> vertexi = {
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+    };
+    
+    const std::vector<uint16_t> indices = {
+    0, 1, 2, 2, 3, 0
     };
 
     const char* WINDOW_TITLE = "Demonstration of my knowledge.";

@@ -9,6 +9,8 @@
 #include <set>
 #include <iostream>
 #include <vector>
+#include <glm/gtc/matrix_transform.hpp>
+#include <chrono>
 
 //honestly I have no idea
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
@@ -159,11 +161,15 @@ void Application::initVulkan() {
     createSwapChain();
     createImageViews();
     createRenderPass();
+    createDescriptorSetLayout();
     createGraphicsPipeline();
     createFrameBuffers();
     createCommandPoolBuffer();
     createVertexBuffer();
     createIndexBuffer();
+    createUniformBuffers();
+    createDescriptorPool();
+    createDescriptorSets();
     createSyncObjects();
 }
 
@@ -674,6 +680,24 @@ void Application::createRenderPass(){
     }
 }
 
+void Application::createDescriptorSetLayout(){
+    VkDescriptorSetLayoutBinding binding{};
+    binding.binding = 0;
+    binding.descriptorCount = 1;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    binding.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo ci{};
+    ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    ci.bindingCount = 1;
+    ci.pBindings = &binding;
+
+    if(vkCreateDescriptorSetLayout(device, &ci, nullptr, &descriptor_set_layout) != VK_SUCCESS){
+        throw std::runtime_error("Couldn't create descriptor set layout.");
+    }
+};
+
 /*
     Creates the Graphics Pipeline
     okay this is it yall
@@ -746,8 +770,8 @@ void Application::createGraphicsPipeline(){
     rasterizer_ci.rasterizerDiscardEnable = VK_FALSE;
     rasterizer_ci.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer_ci.lineWidth = 1.0f;
-    rasterizer_ci.cullMode = VK_CULL_MODE_NONE;
-    rasterizer_ci.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer_ci.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizer_ci.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer_ci.depthBiasEnable = VK_FALSE;
 
     VkPipelineMultisampleStateCreateInfo multisampling_ci{};
@@ -774,6 +798,8 @@ void Application::createGraphicsPipeline(){
     
     VkPipelineLayoutCreateInfo layout_ci{};
     layout_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layout_ci.setLayoutCount = 1;
+    layout_ci.pSetLayouts = &descriptor_set_layout;
 
     if(vkCreatePipelineLayout(device, &layout_ci, nullptr, &pl_layout) != VK_SUCCESS){
         throw std::runtime_error("Couldn't create Pipeline Layout.");
@@ -942,6 +968,27 @@ void Application::createIndexBuffer(){
     vkFreeMemory(device, smem, nullptr);
 }
 
+void Application::createUniformBuffers(){
+    VkDeviceSize buffer_size = sizeof(UniformBufferObject);
+
+    uniform_buffers.resize(MAX_FLIGHT_FRAMES);
+    uniform_buffer_mems.resize(MAX_FLIGHT_FRAMES);
+    muniform_buffers.resize(MAX_FLIGHT_FRAMES);
+
+    for(size_t i = 0; i < MAX_FLIGHT_FRAMES; i++){
+        BufferCreateInfo ci{};
+        ci.size = buffer_size;
+        ci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        ci.properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        ci.buffer = &uniform_buffers[i];
+        ci.buffer_memory = &uniform_buffer_mems[i];
+        ci.sharing_mode = VK_SHARING_MODE_EXCLUSIVE; 
+        createBuffer(&ci);
+
+        vkMapMemory(device, uniform_buffer_mems[i], 0, buffer_size, 0, &muniform_buffers[i]);
+    }
+}
+
 void Application::copyBuffer(VkBuffer srcb, VkBuffer dstb, VkDeviceSize size){
     VkCommandBufferAllocateInfo aci{};
     aci.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1022,7 +1069,7 @@ void Application::createCommandPoolBuffer(){
     }
 }
 
-void Application::recordCommandBuffer(VkCommandBuffer target, uint32_t image_index){
+void Application::recordCommandBuffer(VkCommandBuffer target, uint32_t image_index){    
     VkCommandBufferBeginInfo begin_i{};
     begin_i.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     
@@ -1065,6 +1112,7 @@ void Application::recordCommandBuffer(VkCommandBuffer target, uint32_t image_ind
     scissor.extent = sc_extent;
     vkCmdSetScissor(cmdb[cur_frame], 0, 1, &scissor);
 
+    vkCmdBindDescriptorSets(cmdb[cur_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, pl_layout, 0, 1, &dsets[cur_frame], 0, nullptr);
     vkCmdDrawIndexed(cmdb[cur_frame], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
     vkCmdEndRenderPass(cmdb[cur_frame]);
@@ -1072,6 +1120,55 @@ void Application::recordCommandBuffer(VkCommandBuffer target, uint32_t image_ind
     if(vkEndCommandBuffer(cmdb[cur_frame]) != VK_SUCCESS){
         throw std::runtime_error("Failed to record command buffer.");
     }
+}
+
+void Application::createDescriptorPool(){
+    VkDescriptorPoolSize psize;
+    psize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    psize.descriptorCount = static_cast<uint32_t>(MAX_FLIGHT_FRAMES);
+    VkDescriptorPoolCreateInfo ci{};
+    ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    ci.poolSizeCount = 1;
+    ci.pPoolSizes = &psize;
+    ci.maxSets = static_cast<uint32_t>(MAX_FLIGHT_FRAMES);
+
+    if(vkCreateDescriptorPool(device, &ci, nullptr, &dpool) != VK_SUCCESS ){
+        throw std::runtime_error("Couldn't create descriptor pool.");
+    }
+}
+
+void Application::createDescriptorSets(){
+    std::vector<VkDescriptorSetLayout> layouts(MAX_FLIGHT_FRAMES, descriptor_set_layout);
+    VkDescriptorSetAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    ai.descriptorPool = dpool;
+    ai.descriptorSetCount = static_cast<uint32_t>(MAX_FLIGHT_FRAMES);
+    ai.pSetLayouts = layouts.data();
+    
+    dsets.resize(MAX_FLIGHT_FRAMES);
+    if(vkAllocateDescriptorSets(device, &ai, dsets.data()) != VK_SUCCESS) {
+        throw std::runtime_error("Couldn't allocate descriptor sets.");
+    }
+
+    for (size_t i = 0; i < MAX_FLIGHT_FRAMES; i++){
+        VkDescriptorBufferInfo bi{};
+        bi.buffer = uniform_buffers[i];
+        bi.offset = 0;
+        bi.range = sizeof(UniformBufferObject);
+
+        VkWriteDescriptorSet wdset{};
+        wdset.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        wdset.dstSet = dsets[i];
+        wdset.dstBinding = 0;
+        wdset.dstArrayElement = 0;
+        wdset.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        wdset.descriptorCount = 1;
+        wdset.pBufferInfo = &bi;
+
+        vkUpdateDescriptorSets(device, 1, &wdset, 0, nullptr);
+
+    }
+
 }
 
 void Application::createSyncObjects(){
@@ -1134,6 +1231,8 @@ void Application::drawFrame(){
     }
     recordCommandBuffer(cmdb[cur_frame], image_index);
 
+    updateUniformBuffer(cur_frame);
+
     VkSubmitInfo submit_info{};
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -1175,6 +1274,22 @@ void Application::drawFrame(){
     cur_frame = (cur_frame + 1) % MAX_FLIGHT_FRAMES;
 }
 
+void Application::updateUniformBuffer(uint32_t cur_image){
+    static auto start_time = std::chrono::high_resolution_clock::now();
+
+    auto current_time = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(current_time - start_time).count();
+
+    UniformBufferObject ubo{};
+    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.view = ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.proj = glm::perspective(glm::radians(45.0f), sc_extent.width / (float) sc_extent.height, 0.1f, 10.0f);
+
+    ubo.proj[1][1] *= -1;
+
+    memcpy(muniform_buffers[cur_image], &ubo, sizeof(ubo));
+}
+
 //Cleans up and closes everything.
 void Application::cleanUp() {
     if(ENABLE_VALIDATION_LAYERS){
@@ -1185,10 +1300,15 @@ void Application::cleanUp() {
         vkDestroySemaphore(device, sps_image_available[i], nullptr);
         vkDestroySemaphore(device, sps_render_finished[i], nullptr);
         vkDestroyFence(device, fs_flight[i], nullptr);
+        vkDestroyBuffer(device, uniform_buffers[i], nullptr);
+        vkFreeMemory(device, uniform_buffer_mems[i], nullptr);
     }    
 
+    vkDestroyDescriptorPool(device, dpool, nullptr);
+    vkDestroyDescriptorSetLayout(device, descriptor_set_layout, nullptr);
    
     cleanupSwapChain(); // DESTROY SWAPCHAIN
+
 
     vkDestroyBuffer(device, vertex_buffer, nullptr);
     vkFreeMemory(device, vertex_mem, nullptr);

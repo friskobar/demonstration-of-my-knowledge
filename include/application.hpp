@@ -5,6 +5,8 @@
 #include <string>
 #include <optional>
 #include <vector>
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 #include <array>
 
@@ -47,6 +49,12 @@ private:
         uint32_t family_count;
     };
 
+    struct UniformBufferObject{
+        glm::mat4 model;
+        glm::mat4 view;
+        glm::mat4 proj;
+    };
+
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
     static void framebufferResizeCallback(GLFWwindow* window, int new_width, int new_height);
 
@@ -78,17 +86,22 @@ private:
     void recreateSwapChain();
     void cleanupSwapChain();
     void createRenderPass();
+    void createDescriptorSetLayout();
     void createGraphicsPipeline();
     VkShaderModule createShaderModule(const std::string& path);
     void createFrameBuffers();
     void createVertexBuffer();
     void createIndexBuffer();
+    void createUniformBuffers();
+    void createDescriptorPool();
+    void createDescriptorSets();
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     void createCommandPoolBuffer();
     void recordCommandBuffer(VkCommandBuffer buffer, uint32_t image_index);
     void createSyncObjects();
     void mainLoop();
     void drawFrame();
+    void updateUniformBuffer(uint32_t cur_image);
     void cleanUp();
 
     VkInstance instance = nullptr;
@@ -104,6 +117,10 @@ private:
     VkBuffer index_buffer = nullptr;
     VkDeviceMemory index_mem = nullptr;
 
+    std::vector<VkBuffer> uniform_buffers;
+    std::vector<VkDeviceMemory> uniform_buffer_mems;
+    std::vector<void*> muniform_buffers;
+
     VkSwapchainKHR swapchain = nullptr;
     std::vector<VkImage> sc_images;
     std::vector<VkImageView> sc_views;
@@ -112,6 +129,9 @@ private:
     std::vector<VkFramebuffer> sc_fb;
 
     VkRenderPass render_pass = nullptr;
+    VkDescriptorSetLayout descriptor_set_layout;
+    VkDescriptorPool dpool;
+    std::vector<VkDescriptorSet> dsets;
     VkPipelineLayout pl_layout = nullptr;
     VkPipeline pipeline = nullptr;
 

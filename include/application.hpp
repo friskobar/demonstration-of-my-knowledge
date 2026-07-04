@@ -9,6 +9,7 @@
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 #include <array>
+#include <stb_image.h>
 
 class Application{
 public:
@@ -33,9 +34,10 @@ private:
     struct Vertex{
         glm::vec2 pos;
         glm::vec3 color;
+        glm::vec2 tex_coord;
 
         static VkVertexInputBindingDescription getBindingDescription();
-        static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions();
+        static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions();
     };
 
     struct BufferCreateInfo{
@@ -47,6 +49,20 @@ private:
         VkSharingMode sharing_mode;
         uint32_t* indices;
         uint32_t family_count;
+    };
+
+    struct ImageCreateInfo{
+        int tex_width, tex_height, tex_depth, tex_channels, mip_levels, array_layers, family_count;
+        VkSampleCountFlagBits sample_count;
+        uint32_t* indices;
+        VkSharingMode sharing_mode;
+        VkImageTiling tiling;
+        VkFormat format;
+        VkImageLayout initial_layout;
+        VkImageType image_type;
+        VkImageUsageFlags image_usage;
+        VkImage* image;
+        VkDeviceMemory* memory;
     };
 
     struct UniformBufferObject{
@@ -62,6 +78,12 @@ private:
     static void populateDebugMessengerCI(VkDebugUtilsMessengerCreateInfoEXT& create_info);
     void createBuffer(BufferCreateInfo *create_info);
     void copyBuffer(VkBuffer srcb, VkBuffer dstb, VkDeviceSize size);
+    void createImage(ImageCreateInfo *create_info);
+    void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout);
+    VkCommandBuffer beginSingleTimeCommands();
+    void endSingleTimeCommands(VkCommandBuffer buffer);
+    void copyBufferImage(VkBuffer srcbuffer, VkImage fromimage, uint32_t width, uint32_t height);
+    VkImageView createImageView(VkImage image, VkFormat format);
 
     void initWindow();
     void initVulkan();
@@ -77,9 +99,7 @@ private:
     void createLogicalDevice();
     void createSwapChain();
     SwapChainSupportDetails querySwapchainSupport(VkPhysicalDevice target) const;
-
     static VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR>& available_modes);
-
     static VkSurfaceFormatKHR chooseFormat(const std::vector<VkSurfaceFormatKHR>& available_formats);
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
     void createImageViews();
@@ -90,6 +110,9 @@ private:
     void createGraphicsPipeline();
     VkShaderModule createShaderModule(const std::string& path);
     void createFrameBuffers();
+    void createTextureImage();
+    void createTextureImageView();
+    void createTextureSampler();
     void createVertexBuffer();
     void createIndexBuffer();
     void createUniformBuffers();
@@ -116,6 +139,13 @@ private:
     VkDeviceMemory vertex_mem = nullptr;
     VkBuffer index_buffer = nullptr;
     VkDeviceMemory index_mem = nullptr;
+
+    VkSampler tex_sampler = nullptr;
+    VkImage tex_image = nullptr;
+    VkDeviceMemory tex_mem = nullptr;
+    VkBuffer staging_buffer = nullptr;
+    VkDeviceMemory staging_mem = nullptr;
+    VkImageView tex_view = nullptr;
 
     std::vector<VkBuffer> uniform_buffers;
     std::vector<VkDeviceMemory> uniform_buffer_mems;
@@ -175,10 +205,10 @@ private:
     const uint32_t MAX_FLIGHT_FRAMES = 2;
 
     const std::vector<Vertex> vertexi = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
     };
     
     const std::vector<uint16_t> indices = {

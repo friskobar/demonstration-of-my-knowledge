@@ -7,7 +7,9 @@
 #include <vector>
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <array>
 #include <stb_image.h>
 
@@ -32,7 +34,7 @@ private:
     };
 
     struct Vertex{
-        glm::vec2 pos;
+        glm::vec3 pos;
         glm::vec3 color;
         glm::vec2 tex_coord;
 
@@ -59,10 +61,11 @@ private:
         VkImageTiling tiling;
         VkFormat format;
         VkImageLayout initial_layout;
-        VkImageType image_type;
+        VkImageType image_type = VK_IMAGE_TYPE_2D;
         VkImageUsageFlags image_usage;
         VkImage* image;
         VkDeviceMemory* memory;
+        VkMemoryPropertyFlags mem_props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     };
 
     struct UniformBufferObject{
@@ -83,7 +86,7 @@ private:
     VkCommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(VkCommandBuffer buffer);
     void copyBufferImage(VkBuffer srcbuffer, VkImage fromimage, uint32_t width, uint32_t height);
-    VkImageView createImageView(VkImage image, VkFormat format);
+    VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspects);
 
     void initWindow();
     void initVulkan();
@@ -110,6 +113,7 @@ private:
     void createGraphicsPipeline();
     VkShaderModule createShaderModule(const std::string& path);
     void createFrameBuffers();
+    void createDepthResources();
     void createTextureImage();
     void createTextureImageView();
     void createTextureSampler();
@@ -139,6 +143,10 @@ private:
     VkDeviceMemory vertex_mem = nullptr;
     VkBuffer index_buffer = nullptr;
     VkDeviceMemory index_mem = nullptr;
+
+    VkImage depth_tex = nullptr;
+    VkDeviceMemory depth_memory;
+    VkImageView depth_view;
 
     VkSampler tex_sampler = nullptr;
     VkImage tex_image = nullptr;
@@ -205,14 +213,20 @@ private:
     const uint32_t MAX_FLIGHT_FRAMES = 2;
 
     const std::vector<Vertex> vertexi = {
-        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
-    };
+    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+
+    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
+};
     
     const std::vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0
+    0, 1, 2, 2, 3, 0,
+    4, 5, 6, 6, 7, 4
     };
 
     const char* WINDOW_TITLE = "Demonstration of my knowledge.";

@@ -8,15 +8,31 @@
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/hash.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <array>
 #include <stb_image.h>
 
+#include <imgui.h>
+#include <backends/imgui_impl_vulkan.h>
+#include <backends/imgui_impl_glfw.h>
+
 class Application{
 public:
     void run();
+    
+    struct Vertex{
+        glm::vec3 pos;
+        glm::vec3 color;
+        glm::vec2 tex_coord;
 
+        static VkVertexInputBindingDescription getBindingDescription();
+        static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions();
+    
+        bool operator==(const Vertex& other) const;
+    };
 private:
 
     struct QueueFamilyIndices{
@@ -33,14 +49,6 @@ private:
         std::vector<VkSurfaceFormatKHR> formats;
     };
 
-    struct Vertex{
-        glm::vec3 pos;
-        glm::vec3 color;
-        glm::vec2 tex_coord;
-
-        static VkVertexInputBindingDescription getBindingDescription();
-        static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions();
-    };
 
     struct BufferCreateInfo{
         VkDeviceSize size;
@@ -76,6 +84,7 @@ private:
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
     static void framebufferResizeCallback(GLFWwindow* window, int new_width, int new_height);
+    static void check_vk_result(VkResult result);
 
     static std::vector<char> readFile(const std::string& file_name);
     static void populateDebugMessengerCI(VkDebugUtilsMessengerCreateInfoEXT& create_info);
@@ -117,6 +126,7 @@ private:
     void createTextureImage();
     void createTextureImageView();
     void createTextureSampler();
+    void loadModel();
     void createVertexBuffer();
     void createIndexBuffer();
     void createUniformBuffers();
@@ -126,6 +136,7 @@ private:
     void createCommandPoolBuffer();
     void recordCommandBuffer(VkCommandBuffer buffer, uint32_t image_index);
     void createSyncObjects();
+    void initImGUI();
     void mainLoop();
     void drawFrame();
     void updateUniformBuffer(uint32_t cur_image);
@@ -193,9 +204,13 @@ private:
 
     uint32_t cur_frame = 0;
 
+    VkDescriptorPool imm_dpool;
 
     const uint16_t START_WIDTH = 640;
     const uint16_t START_HEIGHT = 360;
+
+    const char* tex_path = "textures/tex.png";
+    const char* model_path = "models/suzanne.obj";
 
     const std::vector<const char*> VALIDATION_LAYERS = {
         "VK_LAYER_KHRONOS_validation"
@@ -212,22 +227,9 @@ private:
 
     const uint32_t MAX_FLIGHT_FRAMES = 2;
 
-    const std::vector<Vertex> vertexi = {
-    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
-};
+    std::vector<Vertex> vertexi;
     
-    const std::vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0,
-    4, 5, 6, 6, 7, 4
-    };
+    std::vector<uint32_t> indices;
 
     const char* WINDOW_TITLE = "Demonstration of my knowledge.";
 };

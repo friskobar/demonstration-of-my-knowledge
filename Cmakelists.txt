@@ -5,27 +5,27 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project(DOMK VERSION 0)
 
-set(GLFW3_ROOT "C:/Users/USER/include")
-set(GLFW3_LIB_ROOT "C:/Users/USER/libs")
-set(GLM_ROOT_DIR "C:/Users/USER/include")
-set(GLM_LIB_ROOT "C:/Users/USER/libs")
-
 find_package(Vulkan REQUIRED)
 find_package(GLFW3 REQUIRED)
 find_package(GLM REQUIRED)
 find_package(tinyobjloader REQUIRED)
+find_package(ImGUI REQUIRED)
 
 file(GLOB src "src/*.cpp" "src/*.c")
+file(GLOB imguisrc "${ImGUI_DIR}/*.cpp" "${ImGUI_DIR}/backends/imgui_impl_vulkan.cpp" "${ImGUI_DIR}/backends/imgui_impl_glfw.cpp")
 
-add_executable(DOMK ${src})
+add_executable(DOMK ${src} ${imguisrc})
 
 target_compile_features(DOMK PRIVATE cxx_std_23)
 
 target_include_directories(DOMK PUBLIC "include")
 target_include_directories(DOMK PUBLIC ${GLFW3_INCLUDE_DIR})
 target_include_directories(DOMK PUBLIC ${GLM_INCLUDE_DIR})
+target_include_directories(DOMK PUBLIC ${TOL_INCLUDE_DIR})
 target_include_directories(DOMK PUBLIC ${Vulkan_INCLUDE_DIRS})
+target_include_directories(DOMK PUBLIC ${ImGUI_INCLUDE_DIR})
 
 target_link_libraries(DOMK PUBLIC Vulkan::Vulkan)
 target_link_libraries(DOMK PUBLIC ${GLM_LIB_PATH})
 target_link_libraries(DOMK PUBLIC ${GLFW3_LIBRARY})
+target_link_libraries(DOMK PUBLIC ${TOL_LIB_PATH})

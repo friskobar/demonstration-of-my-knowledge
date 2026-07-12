@@ -1,7 +1,12 @@
+#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_vulkan.h"
+#include "imgui.h"
 #include <array>
 #define STB_IMAGE_IMPLEMENTATION
 #include "application.hpp"
 
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
 #include <stdexcept>
 #include <cstdint>
 #include <limits>
@@ -13,6 +18,8 @@
 #include <vector>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
+#include <unordered_map>
+
 
 //honestly I have no idea
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
@@ -32,6 +39,14 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
     }
 }
 
+void Application::check_vk_result(VkResult result){
+    if(result == VK_SUCCESS){
+        return;
+    } else {
+        std::cout<<result;
+        throw std::runtime_error("Uh oh! Something happened! Probably with ImGUI.");
+    }
+}
 /*
     Starts the Application.
     First initializes the window, then Vulkan.
@@ -41,6 +56,7 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 void Application::run() {
     initWindow();
     initVulkan();
+    initImGUI();
     mainLoop();
     cleanUp();
 }
@@ -48,6 +64,20 @@ void Application::run() {
 
 bool Application::QueueFamilyIndices::isComplete() const{
     return graphics.has_value() && present.has_value() && transfer.has_value();
+}
+
+namespace std {
+    template<> struct hash<Application::Vertex> {
+        size_t operator()(Application::Vertex const& vertex) const {
+            return ((hash<glm::vec3>()(vertex.pos) ^
+                (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
+                (hash<glm::vec2>()(vertex.tex_coord) << 1);
+        }
+    };
+}
+
+bool Application::Vertex::operator==(const Vertex& other) const{
+    return pos == other.pos && color == other.color && tex_coord == other.tex_coord;
 }
 
 VkVertexInputBindingDescription Application::Vertex::getBindingDescription() {
@@ -343,6 +373,7 @@ void Application::initVulkan() {
     createTextureImage();
     createTextureImageView();
     createTextureSampler();
+    loadModel();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
@@ -799,7 +830,7 @@ void Application::createRenderPass(){
     VkAttachmentDescription color_att{};
     color_att.format = sc_format;
     color_att.samples = VK_SAMPLE_COUNT_1_BIT;
-    color_att.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    color_att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     color_att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
     color_att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -1090,7 +1121,7 @@ void Application::createDepthResources(){
     ici.sample_count = VK_SAMPLE_COUNT_1_BIT;
     ici.tex_width = sc_extent.width;
     ici.tex_height = sc_extent.height;
-    ici.tex_depth = 0;
+    ici.tex_depth = 1;
     ici.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
     ici.mem_props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
@@ -1101,7 +1132,7 @@ void Application::createDepthResources(){
 
 void Application::createTextureImage(){
     int tex_width, tex_height, tex_channels;
-    stbi_uc* pixels = stbi_load("textures/bazinga.jpg", &tex_width, &tex_height, &tex_channels, STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(tex_path, &tex_width, &tex_height, &tex_channels, STBI_rgb_alpha);
     VkDeviceSize img_size = tex_width * tex_height * 4;
 
     if(!pixels) {
@@ -1199,6 +1230,46 @@ void Application::createTextureSampler(){
 
     if(vkCreateSampler(device, &ci, nullptr, &tex_sampler) != VK_SUCCESS){
         throw std::runtime_error("Couldn't create image sampler!");
+    }
+}
+
+void Application::loadModel(){
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string err;
+    std::string warn;
+
+    if(!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, model_path)){
+        throw std::runtime_error(err);
+    }
+
+    std::cout << warn << std::endl;
+
+    std::unordered_map<Vertex, uint32_t> unique_vert{};
+
+
+    for(const tinyobj::shape_t& shape : shapes){
+        for(const tinyobj::index_t& index : shape.mesh.indices) {
+            Vertex v{};
+            v.pos = {
+                attrib.vertices[3*index.vertex_index + 0],
+                attrib.vertices[3*index.vertex_index + 1],
+                attrib.vertices[3*index.vertex_index + 2]
+            };
+            v.tex_coord = {
+                attrib.texcoords[2*index.texcoord_index + 0],
+                1.0f - attrib.texcoords[2*index.texcoord_index + 1]
+            };
+
+            v.color = {1.0f, 1.0f, 1.0f};
+
+            if(unique_vert.count(v) == 0){
+                unique_vert[v] = static_cast<uint32_t>(vertexi.size());
+                vertexi.push_back(v);
+            }
+            indices.push_back(unique_vert[v]);
+        }
     }
 }
 
@@ -1430,7 +1501,7 @@ void Application::recordCommandBuffer(VkCommandBuffer target, uint32_t image_ind
     VkDeviceSize offsets = {0};
     vkCmdBindVertexBuffers(cmdb[cur_frame], 0, 1, &vert_buffers, &offsets);
 
-    vkCmdBindIndexBuffer(cmdb[cur_frame], index_buffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdBindIndexBuffer(cmdb[cur_frame], index_buffer, 0, VK_INDEX_TYPE_UINT32);
     
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -1448,6 +1519,8 @@ void Application::recordCommandBuffer(VkCommandBuffer target, uint32_t image_ind
 
     vkCmdBindDescriptorSets(cmdb[cur_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, pl_layout, 0, 1, &dsets[cur_frame], 0, nullptr);
     vkCmdDrawIndexed(cmdb[cur_frame], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmdb[cur_frame]);
 
     vkCmdEndRenderPass(cmdb[cur_frame]);
 
@@ -1545,10 +1618,67 @@ void Application::createSyncObjects(){
     }
 }
 
+void Application::initImGUI(){
+    IMGUI_CHECKVERSION();
+
+    VkDescriptorPoolSize pool_sizes[] = { { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+		{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+		{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 } };
+
+    VkDescriptorPoolCreateInfo ci{};
+    ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    ci.poolSizeCount = (uint32_t)std::size(pool_sizes);
+    ci.pPoolSizes = pool_sizes;
+    ci.maxSets = 1000;
+	ci.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+
+    if(vkCreateDescriptorPool(device, &ci, nullptr, &imm_dpool) != VK_SUCCESS){
+        throw std::runtime_error("Couldn't create ImGUI Descriptor pool!");
+    }
+
+    ImGui::CreateContext();
+    ImGui_ImplGlfw_InitForVulkan(window, false);
+
+    ImGui_ImplVulkan_InitInfo vii{};
+    vii.Instance = instance;
+    vii.PhysicalDevice = p_device;
+    vii.Device = device;
+    QueueFamilyIndices qfi = findQueueFamilies(p_device);
+    vii.Queue = graphics_queue;
+    vii.DescriptorPool = imm_dpool;
+    vii.MinImageCount = MAX_FLIGHT_FRAMES;
+    vii.ImageCount = MAX_FLIGHT_FRAMES;
+    vii.PipelineInfoMain.RenderPass = render_pass;
+    vii.PipelineInfoMain.Subpass = 0;
+    vii.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    vii.CheckVkResultFn = check_vk_result;
+
+    ImGui_ImplVulkan_Init(&vii);
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+}
+
+
 //Main loop of the application.
 void Application::mainLoop() {
     while(!glfwWindowShouldClose(window)){ // while the window should'nt close:
         glfwPollEvents(); // poll glfw events
+        glfwSetMouseButtonCallback(window, ImGui_ImplGlfw_MouseButtonCallback);
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+        ImGui::ShowDemoWindow();
+        ImGui::Render();
         drawFrame();
     }
 
@@ -1657,6 +1787,10 @@ void Application::cleanUp() {
     vkDestroyDescriptorPool(device, dpool, nullptr);
     vkDestroyDescriptorSetLayout(device, descriptor_set_layout, nullptr);
    
+    vkDestroyDescriptorPool(device, imm_dpool, nullptr);
+    ImGui_ImplVulkan_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+
     cleanupSwapChain(); // DESTROY SWAPCHAIN
 
     vkDestroySampler(device, tex_sampler, nullptr);
@@ -1683,3 +1817,4 @@ void Application::cleanUp() {
     glfwDestroyWindow(window); // DESTROY WINDOW
     glfwTerminate(); // TERMINATE GLFW
 }
+

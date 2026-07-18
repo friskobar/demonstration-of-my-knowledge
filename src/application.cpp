@@ -20,17 +20,6 @@
 #include <chrono>
 #include <unordered_map>
 
-
-//honestly I have no idea
-VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
-    auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
-    if (func != nullptr) {
-        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-    } else {
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
-    }
-}
-
 void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
     auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
         vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
@@ -44,7 +33,7 @@ void Application::check_vk_result(VkResult result){
         return;
     } else {
         std::cout<<result;
-        throw std::runtime_error("Uh oh! Something happened! Probably with ImGUI.");
+        throw std::runtime_error("Uh oh! Something happened!");
     }
 }
 /*
@@ -107,13 +96,6 @@ std::array<VkVertexInputAttributeDescription, 3> Application::Vertex::getAttribu
     descriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
     descriptions[2].offset = offsetof(Vertex, tex_coord);
     return descriptions;
-}
-
-//Validation Layers messages
-VKAPI_ATTR VkBool32 VKAPI_CALL Application::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
-    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
-
-    return VK_FALSE;
 }
 
 //resize window callback
@@ -329,7 +311,7 @@ VkImageView Application::createImageView(VkImage image, VkFormat format, VkImage
     ci.subresourceRange.levelCount = 1;
     ci.subresourceRange.baseArrayLayer = 0;
     ci.subresourceRange.layerCount = 1;
-    
+
     VkImageView view;
 
     if(vkCreateImageView(device, &ci, nullptr, &view) != VK_SUCCESS){
@@ -358,7 +340,6 @@ void Application::initWindow() {
 //Creates the Vulkan Instance.
 void Application::initVulkan() {
     createInstance();
-    setupDebugMessenger();
     createSurface();
     pickPhysicalDevice();
     createLogicalDevice();
@@ -417,10 +398,6 @@ std::vector<const char*> Application::getRequiredExtensions() const {
 
     std::vector<const char*> extensions(glfw_extensions, glfw_extension_count + glfw_extensions);
 
-    if(ENABLE_VALIDATION_LAYERS){
-        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
-
     return extensions;
 
 }
@@ -445,19 +422,8 @@ void Application::createInstance() {
     create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     create_info.pApplicationInfo = &app_info;
     
-    
-        VkDebugUtilsMessengerCreateInfoEXT debug_create_info{};
-        if (ENABLE_VALIDATION_LAYERS) {
-            create_info.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
-            create_info.ppEnabledLayerNames = VALIDATION_LAYERS.data();
-
-            populateDebugMessengerCI(debug_create_info);
-            create_info.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debug_create_info;
-        } else {
-            create_info.enabledLayerCount = 0;
-
-            create_info.pNext = nullptr;
-        }
+    create_info.enabledLayerCount = 0;
+    create_info.pNext = nullptr;
 
     //apply glfw/vk extensions
 
@@ -470,27 +436,6 @@ void Application::createInstance() {
         throw std::runtime_error("Couldn't create Vulkan Instance!");
     }
 
-}
-
-//Setups the Debug Messenger
-void Application::setupDebugMessenger(){
-    if(!ENABLE_VALIDATION_LAYERS) return;
-    VkDebugUtilsMessengerCreateInfoEXT create_info{};
-    populateDebugMessengerCI(create_info);
-
-    if(CreateDebugUtilsMessengerEXT(instance, &create_info, nullptr, &debug_messenger) != VK_SUCCESS){
-        throw std::runtime_error("Couldn't create debug utils messenger.");
-    }
-
-}
-
-//Populates the debug messenger Create Info
-void Application::populateDebugMessengerCI(VkDebugUtilsMessengerCreateInfoEXT& create_info) {
-    create_info = {};
-    create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    create_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    create_info.pfnUserCallback = debugCallback;
 }
 
 //Creates the Vulkan surface to render images upon.
@@ -766,15 +711,8 @@ void Application::createLogicalDevice(){
     deviceci.pQueueCreateInfos = cis.data();
 
     deviceci.pEnabledFeatures = &features;
-
-    deviceci.enabledExtensionCount = 0;
-
-    if(ENABLE_VALIDATION_LAYERS){
-        deviceci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
-        deviceci.ppEnabledLayerNames = VALIDATION_LAYERS.data();
-    } else {
-        deviceci.enabledLayerCount = 0;
-    }
+    
+    deviceci.enabledLayerCount = 0;
 
     deviceci.enabledExtensionCount = static_cast<uint32_t>(DEVICE_EXTENSIONS.size());
     deviceci.ppEnabledExtensionNames = DEVICE_EXTENSIONS.data(); 
@@ -1183,10 +1121,19 @@ void Application::createTextureImage(){
     ci.tiling = VK_IMAGE_TILING_OPTIMAL;
     ci.sample_count = VK_SAMPLE_COUNT_1_BIT;
     ci.sharing_mode = VK_SHARING_MODE_CONCURRENT;
+    if (qfi.graphics != qfi.present) {
+        ci.sharing_mode = VK_SHARING_MODE_CONCURRENT;
+        ci.family_count = 2;
+        ci.indices = indices;
+    } else {
+        ci.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+        ci.family_count = 0;
+        ci.indices = nullptr;
+    }
     ci.tex_width = tex_width;
     ci.tex_height = tex_height;
     ci.tex_depth = 1;
-    ci.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;    
+    ci.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
     
     createImage(&ci);
     transitionImageLayout(tex_image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -1520,8 +1467,10 @@ void Application::recordCommandBuffer(VkCommandBuffer target, uint32_t image_ind
     vkCmdBindDescriptorSets(cmdb[cur_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, pl_layout, 0, 1, &dsets[cur_frame], 0, nullptr);
     vkCmdDrawIndexed(cmdb[cur_frame], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmdb[cur_frame]);
-
+    ImDrawData* dd = ImGui::GetDrawData();
+    if(dd != nullptr){
+        ImGui_ImplVulkan_RenderDrawData(dd, cmdb[cur_frame]);
+    }
     vkCmdEndRenderPass(cmdb[cur_frame]);
 
     if(vkEndCommandBuffer(cmdb[cur_frame]) != VK_SUCCESS){
@@ -1595,7 +1544,7 @@ void Application::createDescriptorSets(){
 }
 
 void Application::createSyncObjects(){
-    sps_image_available.resize(sc_images.size());
+    sps_image_available.resize(MAX_FLIGHT_FRAMES);
     sps_render_finished.resize(sc_images.size());
     fs_flight.resize(MAX_FLIGHT_FRAMES);
 
@@ -1605,16 +1554,19 @@ void Application::createSyncObjects(){
 
     VkFenceCreateInfo f_ci{};
     f_ci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    f_ci.flags =  VK_FENCE_CREATE_SIGNALED_BIT;
+    f_ci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     f_ci.pNext = nullptr;
 
     for(size_t i = 0; i < MAX_FLIGHT_FRAMES; i++){
-        VkBool32 ia = vkCreateSemaphore(device, &sp_ci, nullptr, &sps_image_available[i]);
-        VkBool32 rf = vkCreateSemaphore(device, &sp_ci, nullptr, &sps_render_finished[i]);
-        VkBool32 fl = vkCreateFence(device, &f_ci, nullptr, &fs_flight[i]);
-        if(ia || rf || fl != VK_SUCCESS){
-                throw std::runtime_error("Couldn't create sync objects for a frame.");
-        }
+        VkResult ia = vkCreateSemaphore(device, &sp_ci, nullptr, &sps_image_available[i]);
+        check_vk_result(ia);
+        VkResult fl = vkCreateFence(device, &f_ci, nullptr, &fs_flight[i]);
+        check_vk_result(fl);
+    }
+    
+    for(size_t i = 0; i < sc_images.size(); i++){
+        VkResult rf = vkCreateSemaphore(device, &sp_ci, nullptr, &sps_render_finished[i]);
+        check_vk_result(rf);
     }
 }
 
@@ -1647,6 +1599,9 @@ void Application::initImGUI(){
     ImGui::CreateContext();
     ImGui_ImplGlfw_InitForVulkan(window, false);
 
+    glfwSetMouseButtonCallback(window, ImGui_ImplGlfw_MouseButtonCallback);
+    glfwSetKeyCallback(window, ImGui_ImplGlfw_KeyCallback);
+    
     ImGui_ImplVulkan_InitInfo vii{};
     vii.Instance = instance;
     vii.PhysicalDevice = p_device;
@@ -1666,23 +1621,109 @@ void Application::initImGUI(){
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+    setupImGuiStyle(true, 1.0f);
+
 }
 
+void Application::setupImGuiStyle(bool dark, float alpha)
+{
+    ImGuiStyle& style = ImGui::GetStyle();
+    
+    // light style from Pacôme Danhiez (user itamago) https://github.com/ocornut/imgui/pull/511#issuecomment-175719267
+    style.Alpha = 1.0f;
+    style.FrameRounding = 3.0f;
+    style.Colors[ImGuiCol_Text]                  = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
+    style.Colors[ImGuiCol_TextDisabled]          = ImVec4(0.60f, 0.60f, 0.60f, 1.00f);
+    style.Colors[ImGuiCol_WindowBg]              = ImVec4(0.94f, 0.94f, 0.94f, 0.94f);
+    style.Colors[ImGuiCol_PopupBg]               = ImVec4(1.00f, 1.00f, 1.00f, 0.94f);
+    style.Colors[ImGuiCol_Border]                = ImVec4(0.00f, 0.00f, 0.00f, 0.39f);
+    style.Colors[ImGuiCol_BorderShadow]          = ImVec4(1.00f, 1.00f, 1.00f, 0.10f);
+    style.Colors[ImGuiCol_FrameBg]               = ImVec4(1.00f, 1.00f, 1.00f, 0.94f);
+    style.Colors[ImGuiCol_FrameBgHovered]        = ImVec4(0.26f, 0.59f, 0.98f, 0.40f);
+    style.Colors[ImGuiCol_FrameBgActive]         = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
+    style.Colors[ImGuiCol_TitleBg]               = ImVec4(0.96f, 0.96f, 0.96f, 1.00f);
+    style.Colors[ImGuiCol_TitleBgCollapsed]      = ImVec4(1.00f, 1.00f, 1.00f, 0.51f);
+    style.Colors[ImGuiCol_TitleBgActive]         = ImVec4(0.82f, 0.82f, 0.82f, 1.00f);
+    style.Colors[ImGuiCol_MenuBarBg]             = ImVec4(0.86f, 0.86f, 0.86f, 1.00f);
+    style.Colors[ImGuiCol_ScrollbarBg]           = ImVec4(0.98f, 0.98f, 0.98f, 0.53f);
+    style.Colors[ImGuiCol_ScrollbarGrab]         = ImVec4(0.69f, 0.69f, 0.69f, 1.00f);
+    style.Colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(0.59f, 0.59f, 0.59f, 1.00f);
+    style.Colors[ImGuiCol_ScrollbarGrabActive]   = ImVec4(0.49f, 0.49f, 0.49f, 1.00f);
+    style.Colors[ImGuiCol_CheckMark]             = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    style.Colors[ImGuiCol_SliderGrab]            = ImVec4(0.24f, 0.52f, 0.88f, 1.00f);
+    style.Colors[ImGuiCol_SliderGrabActive]      = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    style.Colors[ImGuiCol_Button]                = ImVec4(0.26f, 0.59f, 0.98f, 0.40f);
+    style.Colors[ImGuiCol_ButtonHovered]         = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    style.Colors[ImGuiCol_ButtonActive]          = ImVec4(0.06f, 0.53f, 0.98f, 1.00f);
+    style.Colors[ImGuiCol_Header]                = ImVec4(0.26f, 0.59f, 0.98f, 0.31f);
+    style.Colors[ImGuiCol_HeaderHovered]         = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
+    style.Colors[ImGuiCol_HeaderActive]          = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    style.Colors[ImGuiCol_ResizeGrip]            = ImVec4(1.00f, 1.00f, 1.00f, 0.50f);
+    style.Colors[ImGuiCol_ResizeGripHovered]     = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
+    style.Colors[ImGuiCol_ResizeGripActive]      = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
+    style.Colors[ImGuiCol_PlotLines]             = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+    style.Colors[ImGuiCol_PlotLinesHovered]      = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
+    style.Colors[ImGuiCol_PlotHistogram]         = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
+    style.Colors[ImGuiCol_PlotHistogramHovered]  = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
+    style.Colors[ImGuiCol_TextSelectedBg]        = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
+
+        if(dark)
+        {
+            for (int i = 0; i <= ImGuiCol_COUNT; i++)
+            {
+                ImVec4& col = style.Colors[i];
+                float H, S, V;
+                ImGui::ColorConvertRGBtoHSV( col.x, col.y, col.z, H, S, V );
+
+                if( S < 0.1f )
+                {
+                   V = 1.0f - V;
+                }
+                ImGui::ColorConvertHSVtoRGB( H, S, V, col.x, col.y, col.z );
+                if( col.w < 1.00f )
+                {
+                    col.w *= alpha;
+                }
+            }
+        }
+        else
+        {
+            for (int i = 0; i <= ImGuiCol_COUNT; i++)
+            {
+                ImVec4& col = style.Colors[i];
+                if( col.w < 1.00f )
+                {
+                    col.x *= alpha;
+                    col.y *= alpha;
+                    col.z *= alpha;
+                    col.w *= alpha;
+                }
+            }
+        }
+    }
 
 //Main loop of the application.
 void Application::mainLoop() {
     while(!glfwWindowShouldClose(window)){ // while the window should'nt close:
         glfwPollEvents(); // poll glfw events
-        glfwSetMouseButtonCallback(window, ImGui_ImplGlfw_MouseButtonCallback);
-        ImGui_ImplVulkan_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
-        ImGui::ShowDemoWindow();
-        ImGui::Render();
+        imGuiLoop();
         drawFrame();
     }
 
     vkDeviceWaitIdle(device);
+}
+
+void Application::imGuiLoop(){
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    ImGui::Begin("Window");
+    ImGui::Text("araujo vai se fuder");
+    ImGui::End();
+        
+    ImGui::Render();
 }
 
 //draws current frame and presents last one
@@ -1725,7 +1766,7 @@ void Application::drawFrame(){
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &cmdb[cur_frame];
 
-    VkSemaphore signal_semaphores[] = {sps_render_finished[cur_frame]};
+    VkSemaphore signal_semaphores[] = {sps_render_finished[image_index]};
     submit_info.signalSemaphoreCount = 1;
     submit_info.pSignalSemaphores = signal_semaphores;
 
@@ -1772,22 +1813,17 @@ void Application::updateUniformBuffer(uint32_t cur_image){
 
 //Cleans up and closes everything.
 void Application::cleanUp() {
-    if(ENABLE_VALIDATION_LAYERS){
-        DestroyDebugUtilsMessengerEXT(instance, debug_messenger, nullptr); // DESTROY THE THING
-    }
-
     for(size_t i = 0; i < MAX_FLIGHT_FRAMES; i++){ // DESTROY SYNC OBJECTS
         vkDestroySemaphore(device, sps_image_available[i], nullptr);
         vkDestroySemaphore(device, sps_render_finished[i], nullptr);
         vkDestroyFence(device, fs_flight[i], nullptr);
         vkDestroyBuffer(device, uniform_buffers[i], nullptr);
         vkFreeMemory(device, uniform_buffer_mems[i], nullptr);
-    }    
-
+    }
+    
     vkDestroyDescriptorPool(device, dpool, nullptr);
     vkDestroyDescriptorSetLayout(device, descriptor_set_layout, nullptr);
    
-    vkDestroyDescriptorPool(device, imm_dpool, nullptr);
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
 

@@ -82,12 +82,10 @@ private:
         glm::mat4 proj;
     };
 
-    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
     static void framebufferResizeCallback(GLFWwindow* window, int new_width, int new_height);
+    
     static void check_vk_result(VkResult result);
-
     static std::vector<char> readFile(const std::string& file_name);
-    static void populateDebugMessengerCI(VkDebugUtilsMessengerCreateInfoEXT& create_info);
     void createBuffer(BufferCreateInfo *create_info);
     void copyBuffer(VkBuffer srcb, VkBuffer dstb, VkDeviceSize size);
     void createImage(ImageCreateInfo *create_info);
@@ -102,7 +100,6 @@ private:
     bool checkValidationLayerSupport() const;
     std::vector<const char*> getRequiredExtensions() const;
     void createInstance();
-    void setupDebugMessenger();
     void createSurface();
     void pickPhysicalDevice();
     bool isDeviceSuitable(VkPhysicalDevice target, VkPhysicalDeviceFeatures& features, VkPhysicalDeviceProperties& properties) const;
@@ -137,7 +134,9 @@ private:
     void recordCommandBuffer(VkCommandBuffer buffer, uint32_t image_index);
     void createSyncObjects();
     void initImGUI();
+    void setupImGuiStyle(bool dark, float alpha);
     void mainLoop();
+    void imGuiLoop();
     void drawFrame();
     void updateUniformBuffer(uint32_t cur_image);
     void cleanUp();
@@ -215,11 +214,6 @@ private:
     const std::vector<const char*> VALIDATION_LAYERS = {
         "VK_LAYER_KHRONOS_validation"
     };
-    #ifdef NDEBUG
-    const bool ENABLE_VALIDATION_LAYERS = false;
-    #else
-    const bool ENABLE_VALIDATION_LAYERS = true;
-    #endif
 
     const std::vector<const char*> DEVICE_EXTENSIONS = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
